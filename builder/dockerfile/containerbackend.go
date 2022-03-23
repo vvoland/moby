@@ -60,7 +60,7 @@ func (c *containerManager) Run(ctx context.Context, cID string, stdout, stderr i
 	go func() {
 		select {
 		case <-ctx.Done():
-			logrus.Debugln("Build cancelled, killing and removing container:", cID)
+			logrus.WithError(ctx.Err()).Debugln("Build cancelled, killing and removing container:", cID)
 			c.backend.ContainerKill(context.TODO(), cID, 0)
 			c.removeContainer(context.TODO(), cID, stdout)
 			cancelErrCh <- errCancelled
@@ -69,6 +69,7 @@ func (c *containerManager) Run(ctx context.Context, cID string, stdout, stderr i
 		}
 	}()
 
+	logrus.WithError(ctx.Err()).Debugln("containerManager.Run(): calling ContainerStart()")
 	if err := c.backend.ContainerStart(ctx, cID, nil, "", ""); err != nil {
 		close(finished)
 		logCancellationError(cancelErrCh, "error from ContainerStart: "+err.Error())

@@ -215,6 +215,10 @@ func (br *buildRouter) postCancel(ctx context.Context, w http.ResponseWriter, r 
 }
 
 func (br *buildRouter) postBuild(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
+	logrus.WithField("ctx.Err", ctx.Err()).Debugln("postBuild: entered")
+	defer func() {
+		logrus.WithField("ctx.Err", ctx.Err()).Debugln("postBuild: returned")
+	}()
 	var (
 		notVerboseBuffer = bytes.NewBuffer(nil)
 		version          = httputils.VersionFromContext(ctx)

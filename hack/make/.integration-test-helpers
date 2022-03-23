@@ -89,6 +89,9 @@ run_test_integration_suites() {
 				--junitfile="${ABS_DEST}/${pkgname//./-}-junit-report.xml" \
 				--raw-command \
 				-- go tool test2json -p "${pkgname}" -t ./test.main ${flags}
+			exitcode=$?
+			error_on_leaked_containerd_shims
+			exit $exitcode
 		); then exit 1; fi
 	done
 }
@@ -165,11 +168,15 @@ error_on_leaked_containerd_shims() {
 	if [ "$(go env GOOS)" = 'windows' ]; then
 		return
 	fi
-
-	leftovers=$(ps -ax -o pid,cmd \
-		| awk '$2 == "containerd-shim" && $4 ~ /.*\/bundles\/.*\/test-integration/ { print $1 }')
+	leftovers=$(ps --no-headers -e -o pid,comm \
+		| awk '$2 ~ /^containerd-shim/ { print $1 }')
+	ps -ejH
+	for shimid in ${leftovers}; do
+		echo "/proc/${shimid}/cwd -> $(readlink /proc/"${shimid}"/cwd)"
+		echo "/proc/${shimid}/cwd/config.json:"
+		jq . /proc/"${shimid}"/cwd/config.json
+	done
 	if [ -n "$leftovers" ]; then
-		ps aux
 		# shellcheck disable=SC2086
 		kill -9 ${leftovers} 2> /dev/null
 		echo "!!!! WARNING you have left over shim(s), Cleanup your test !!!!"

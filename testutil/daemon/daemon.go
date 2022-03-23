@@ -212,6 +212,7 @@ func New(t testing.TB, ops ...Option) *Daemon {
 	if d.rootlessUser != nil && d.dockerdBinary != defaultDockerdBinary {
 		t.Skipf("DOCKER_ROOTLESS doesn't support specifying non-default dockerd binary path %q", d.dockerdBinary)
 	}
+	t.Logf("Daemon created. id=%v exec-root=%v", d.ID(), d.execRoot)
 
 	return d
 }
