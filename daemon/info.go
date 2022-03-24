@@ -135,7 +135,9 @@ func (daemon *Daemon) fillDriverInfo(v *types.Info) {
 	}
 
 	v.Driver = daemon.graphDriver
-	v.DriverStatus = daemon.imageService.LayerStoreStatus()
+	// TODO(rumpl): I don't know what this status is supposed to mean, bring
+	//				back once I know more.
+	// v.DriverStatus = daemon.imageService.LayerStoreStatus()
 
 	fillDriverWarnings(v)
 }

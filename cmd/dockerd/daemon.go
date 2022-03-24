@@ -17,7 +17,6 @@ import (
 	buildbackend "github.com/docker/docker/api/server/backend/build"
 	"github.com/docker/docker/api/server/middleware"
 	"github.com/docker/docker/api/server/router"
-	"github.com/docker/docker/api/server/router/build"
 	checkpointrouter "github.com/docker/docker/api/server/router/checkpoint"
 	"github.com/docker/docker/api/server/router/container"
 	distributionrouter "github.com/docker/docker/api/server/router/distribution"
@@ -30,7 +29,6 @@ import (
 	systemrouter "github.com/docker/docker/api/server/router/system"
 	"github.com/docker/docker/api/server/router/volume"
 	buildkit "github.com/docker/docker/builder/builder-next"
-	"github.com/docker/docker/builder/dockerfile"
 	"github.com/docker/docker/cli/debug"
 	"github.com/docker/docker/cmd/dockerd/trap"
 	"github.com/docker/docker/daemon"
@@ -289,38 +287,38 @@ func newRouterOptions(config *config.Config, d *daemon.Daemon) (routerOptions, e
 		return opts, errors.Wrap(err, "failed to create sessionmanager")
 	}
 
-	manager, err := dockerfile.NewBuildManager(d.BuilderBackend(), d.IdentityMapping())
-	if err != nil {
-		return opts, err
-	}
-	cgroupParent := newCgroupParent(config)
-	bk, err := buildkit.New(buildkit.Opt{
-		SessionManager:      sm,
-		Root:                filepath.Join(config.Root, "buildkit"),
-		Dist:                d.DistributionServices(),
-		NetworkController:   d.NetworkController(),
-		DefaultCgroupParent: cgroupParent,
-		RegistryHosts:       d.RegistryHosts(),
-		BuilderConfig:       config.Builder,
-		Rootless:            d.Rootless(),
-		IdentityMapping:     d.IdentityMapping(),
-		DNSConfig:           config.DNSConfig,
-		ApparmorProfile:     daemon.DefaultApparmorProfile(),
-	})
-	if err != nil {
-		return opts, err
-	}
+	// manager, err := dockerfile.NewBuildManager(d.BuilderBackend(), d.IdentityMapping())
+	// if err != nil {
+	// 	return opts, err
+	// }
+	// cgroupParent := newCgroupParent(config)
+	// bk, err := buildkit.New(buildkit.Opt{
+	// 	SessionManager:      sm,
+	// 	Root:                filepath.Join(config.Root, "buildkit"),
+	// 	Dist:                d.DistributionServices(),
+	// 	NetworkController:   d.NetworkController(),
+	// 	DefaultCgroupParent: cgroupParent,
+	// 	RegistryHosts:       d.RegistryHosts(),
+	// 	BuilderConfig:       config.Builder,
+	// 	Rootless:            d.Rootless(),
+	// 	IdentityMapping:     d.IdentityMapping(),
+	// 	DNSConfig:           config.DNSConfig,
+	// 	ApparmorProfile:     daemon.DefaultApparmorProfile(),
+	// })
+	// if err != nil {
+	// 	return opts, err
+	// }
 
-	bb, err := buildbackend.NewBackend(d.ImageService(), manager, bk, d.EventsService)
-	if err != nil {
-		return opts, errors.Wrap(err, "failed to create buildmanager")
-	}
+	// bb, err := buildbackend.NewBackend(d.ImageService(), manager, bk, d.EventsService)
+	// if err != nil {
+	// 	return opts, errors.Wrap(err, "failed to create buildmanager")
+	// }
 	return routerOptions{
 		sessionManager: sm,
-		buildBackend:   bb,
-		buildkit:       bk,
-		features:       d.Features(),
-		daemon:         d,
+		// buildBackend:   bb,
+		// buildkit:       bk,
+		features: d.Features(),
+		daemon:   d,
 	}, nil
 }
 
@@ -493,7 +491,7 @@ func initRouter(opts routerOptions) {
 		image.NewRouter(opts.daemon.ImageService()),
 		systemrouter.NewRouter(opts.daemon, opts.cluster, opts.buildkit, opts.features),
 		volume.NewRouter(opts.daemon.VolumesService()),
-		build.NewRouter(opts.buildBackend, opts.daemon, opts.features),
+		// build.NewRouter(opts.buildBackend, opts.daemon, opts.features),
 		sessionrouter.NewRouter(opts.sessionManager),
 		swarmrouter.NewRouter(opts.cluster),
 		pluginrouter.NewRouter(opts.daemon.PluginManager()),
@@ -501,7 +499,10 @@ func initRouter(opts routerOptions) {
 	}
 
 	grpcBackends := []grpcrouter.Backend{}
-	for _, b := range []interface{}{opts.daemon, opts.buildBackend} {
+	for _, b := range []interface{}{
+		opts.daemon,
+		//  opts.buildBackend,
+	} {
 		if b, ok := b.(grpcrouter.Backend); ok {
 			grpcBackends = append(grpcBackends, b)
 		}

@@ -35,6 +35,7 @@ import (
 	"github.com/docker/docker/builder"
 	"github.com/docker/docker/container"
 	"github.com/docker/docker/daemon/config"
+	"github.com/docker/docker/daemon/containerdstore"
 	"github.com/docker/docker/daemon/events"
 	"github.com/docker/docker/daemon/exec"
 	_ "github.com/docker/docker/daemon/graphdriver/register" // register graph drivers
@@ -1115,7 +1116,10 @@ func NewDaemon(ctx context.Context, config *config.Config, pluginStore *plugin.S
 	// TODO: imageStore, distributionMetadataStore, and ReferenceStore are only
 	// used above to run migration. They could be initialized in ImageService
 	// if migration is called from daemon/images. layerStore might move as well.
-	d.imageService = images.NewImageService(imgSvcConfig)
+
+	// TODO(rumpl): make the image store configurable
+	// d.imageService = images.NewImageService(imgSvcConfig)
+	d.imageService = containerdstore.New(*d.containerdCli)
 	logrus.Debugf("Max Concurrent Downloads: %d", imgSvcConfig.MaxConcurrentDownloads)
 	logrus.Debugf("Max Concurrent Uploads: %d", imgSvcConfig.MaxConcurrentUploads)
 	logrus.Debugf("Max Download Attempts: %d", imgSvcConfig.MaxDownloadAttempts)
