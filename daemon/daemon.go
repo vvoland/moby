@@ -8,6 +8,7 @@ package daemon // import "github.com/docker/docker/daemon"
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/url"
 	"os"
@@ -22,8 +23,14 @@ import (
 	"github.com/containerd/containerd/pkg/dialer"
 	"github.com/containerd/containerd/pkg/userns"
 	"github.com/containerd/containerd/remotes/docker"
+	"github.com/docker/distribution"
+	"github.com/docker/distribution/reference"
 	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/backend"
 	containertypes "github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
+	imagetypes "github.com/docker/docker/api/types/image"
+	registrytypes "github.com/docker/docker/api/types/registry"
 	"github.com/docker/docker/api/types/swarm"
 	"github.com/docker/docker/builder"
 	"github.com/docker/docker/container"
@@ -58,6 +65,7 @@ import (
 	volumesservice "github.com/docker/docker/volume/service"
 	"github.com/moby/buildkit/util/resolver"
 	"github.com/moby/locker"
+	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.etcd.io/bbolt"
@@ -77,6 +85,44 @@ var (
 	errSystemNotSupported = errors.New("the Docker daemon is not supported on this platform")
 )
 
+type ImageServiceInterface interface {
+	GetLayerByID(string) (layer.RWLayer, error)
+	GetLayerMountID(string) (string, error)
+	Cleanup() error
+	GraphDriverName() string
+	CommitBuildStep(context.Context, backend.CommitConfig) (image.ID, error)
+	CreateImage(ctx context.Context, config []byte, parent string) (builder.Image, error)
+	GetImageAndReleasableLayer(ctx context.Context, refOrID string, opts backend.GetImageAndLayerOptions) (builder.Image, builder.ROLayer, error)
+	MakeImageCache(ctx context.Context, sourceRefs []string) (builder.ImageCache, error)
+	TagImageWithReference(ctx context.Context, imageID image.ID, newTag reference.Named) error
+	SquashImage(ctx context.Context, id, parent string) (string, error)
+	ExportImage(ctx context.Context, names []string, outStream io.Writer) error
+	ImageDelete(ctx context.Context, imageRef string, force, prune bool) ([]types.ImageDeleteResponseItem, error)
+	ImageHistory(ctx context.Context, name string) ([]*imagetypes.HistoryResponseItem, error)
+	Images(ctx context.Context, opts types.ImageListOptions) ([]*types.ImageSummary, error)
+	ImagesPrune(ctx context.Context, pruneFilters filters.Args) (*types.ImagesPruneReport, error)
+	ImportImage(ctx context.Context, src string, repository string, platform *specs.Platform, tag string, msg string, inConfig io.ReadCloser, outStream io.Writer, changes []string) error
+	LoadImage(ctx context.Context, inTar io.ReadCloser, outStream io.Writer, quiet bool) error
+	LookupImage(ctx context.Context, name string) (*types.ImageInspect, error)
+	PullImage(ctx context.Context, image, tag string, platform *specs.Platform, metaHeaders map[string][]string, authConfig *types.AuthConfig, outStream io.Writer) error
+	PushImage(ctx context.Context, image, tag string, metaHeaders map[string][]string, authConfig *types.AuthConfig, outStream io.Writer) error
+	SearchRegistryForImages(ctx context.Context, searchFilters filters.Args, term string, limit int, authConfig *types.AuthConfig, metaHeaders map[string][]string) (*registrytypes.SearchResults, error)
+	TagImage(ctx context.Context, imageName, repository, tag string) (string, error)
+	GetRepository(context.Context, reference.Named, *types.AuthConfig) (distribution.Repository, error)
+	ImageDiskUsage(ctx context.Context) ([]*types.ImageSummary, error)
+	LayerDiskUsage(ctx context.Context) (int64, error)
+	ReleaseLayer(rwlayer layer.RWLayer) error
+	CommitImage(ctx context.Context, c backend.CommitConfig) (image.ID, error)
+	GetImage(ctx context.Context, refOrID string, platform *specs.Platform) (retImg *image.Image, retErr error)
+	CreateLayer(ctx context.Context, container *container.Container, initFunc layer.MountInit) (layer.RWLayer, error)
+	DistributionServices() images.DistributionServices
+	CountImages(ctx context.Context) (int, error)
+	LayerStoreStatus() [][2]string
+	GetContainerLayerSize(containerID string) (int64, int64)
+	UpdateConfig(maxDownloads, maxUploads *int)
+	Children(ctx context.Context, id image.ID) ([]image.ID, error)
+}
+
 // Daemon holds information about the Docker daemon.
 type Daemon struct {
 	id                    string
@@ -84,7 +130,7 @@ type Daemon struct {
 	containers            container.Store
 	containersReplica     container.ViewDB
 	execCommands          *exec.Store
-	imageService          *images.ImageService
+	imageService          ImageServiceInterface
 	idIndex               *truncindex.TruncIndex
 	configStore           *config.Config
 	statsCollector        *stats.Collector
@@ -1463,7 +1509,7 @@ func (daemon *Daemon) IdentityMapping() *idtools.IdentityMapping {
 }
 
 // ImageService returns the Daemon's ImageService
-func (daemon *Daemon) ImageService() *images.ImageService {
+func (daemon *Daemon) ImageService() ImageServiceInterface {
 	return daemon.imageService
 }
 
@@ -1471,7 +1517,7 @@ func (daemon *Daemon) ImageService() *images.ImageService {
 func (daemon *Daemon) BuilderBackend() builder.Backend {
 	return struct {
 		*Daemon
-		*images.ImageService
+		ImageServiceInterface
 	}{daemon, daemon.imageService}
 }
 
