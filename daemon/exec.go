@@ -121,6 +121,7 @@ func (daemon *Daemon) ContainerExecCreate(name string, config *types.ExecConfig)
 	execConfig.Entrypoint = entrypoint
 	execConfig.Args = args
 	execConfig.Tty = config.Tty
+	execConfig.ConsoleSize = config.ConsoleSize
 	execConfig.Privileged = config.Privileged
 	execConfig.User = config.User
 	execConfig.WorkingDir = config.WorkingDir
@@ -237,6 +238,12 @@ func (daemon *Daemon) ContainerExecStart(ctx context.Context, name string, stdin
 	p.Env = ec.Env
 	p.Cwd = ec.WorkingDir
 	p.Terminal = ec.Tty
+	if p.Terminal && ec.ConsoleSize != nil {
+		p.ConsoleSize = &specs.Box{
+			Height: ec.ConsoleSize[0],
+			Width:  ec.ConsoleSize[1],
+		}
+	}
 
 	if p.Cwd == "" {
 		p.Cwd = "/"

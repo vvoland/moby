@@ -46,6 +46,12 @@ func (s *containerRouter) postContainerExecCreate(ctx context.Context, w http.Re
 		return execCommandError{}
 	}
 
+	version := httputils.VersionFromContext(ctx)
+	if versions.LessThan(version, "1.42") {
+		// Not supported by API versions before 1.42
+		execConfig.ConsoleSize = nil
+	}
+
 	// Register an instance of Exec in container.
 	id, err := s.backend.ContainerExecCreate(vars["name"], execConfig)
 	if err != nil {

@@ -14,6 +14,9 @@ func (cli *Client) ContainerExecCreate(ctx context.Context, container string, co
 	if err := cli.NewVersionError("1.25", "env"); len(config.Env) != 0 && err != nil {
 		return response, err
 	}
+	if err := cli.NewVersionError("1.42", "console size"); config.ConsoleSize != nil && err != nil {
+		return response, err
+	}
 
 	resp, err := cli.post(ctx, "/containers/"+container+"/exec", nil, config, nil)
 	defer ensureReaderClosed(resp)
