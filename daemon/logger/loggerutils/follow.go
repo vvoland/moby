@@ -72,6 +72,10 @@ func (fl *follow) Do(f *os.File, read logPos) {
 					fl.LogFile.fsopMu.RUnlock()
 				}()
 				f, err = open(f.Name())
+				if f == nil {
+					fmt.Printf("error opening file, f = nil, err: %v", err)
+					fl.Watcher.Err <- fmt.Errorf("error opening file, f = nil, err: %v", err)
+				}
 				wrote = st.pos
 			}()
 			// We tried to open the file inside a critical section

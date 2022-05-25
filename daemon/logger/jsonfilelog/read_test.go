@@ -166,7 +166,7 @@ func TestFollowLogsWithRotation(t *testing.T) {
 					// set of logs that loggertest writes.
 					info.Config = map[string]string{
 						"compress": strconv.FormatBool(cmprs),
-						"max-size": "4096b",
+						"max-size": "4k",
 						"max-file": "3",
 					}
 					dir := t.TempDir()

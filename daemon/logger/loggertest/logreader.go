@@ -1,8 +1,10 @@
 package loggertest // import "github.com/docker/docker/daemon/logger/loggertest"
 
 import (
+	"fmt"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -381,6 +383,79 @@ func (tr Reader) TestFollow(t *testing.T) {
 		<-doneReading
 		assert.DeepEqual(t, logs, expected, compareLog)
 	})
+
+	t.Run("Concurrent", tr.TestConcurrent)
+}
+
+// TestConcurrent tests the Logger and its LogReader implementation for
+// race conditions when logging from multiple goroutines concurrently.
+func (tr Reader) TestConcurrent(t *testing.T) {
+	t.Parallel()
+	l := tr.Factory(t, logger.Info{
+		ContainerID:   "logconcurrent0",
+		ContainerName: "logconcurrent123",
+	})(t)
+
+	msgLine := func(source string, i int) []byte {
+		return []byte(fmt.Sprintf("%s msg %d", source, i))
+	}
+	time0, _ := time.Parse("2006-01-02", "2000-01-01")
+	msgTime := func(i int) time.Time {
+		return time0.Add(time.Hour * time.Duration(i))
+	}
+
+	wg := &sync.WaitGroup{}
+	logTo := func(source string, howMany int) {
+		defer wg.Done()
+		for i := 0; i < howMany; i += 1 {
+			msg := logger.NewMessage()
+			msg.Line = msgLine(source, i)
+			msg.Source = source
+			msg.Timestamp = msgTime(i)
+			l.Log(msg)
+		}
+	}
+
+	// Read all logs
+	lw := l.(logger.LogReader).ReadLogs(logger.ReadConfig{Follow: true, Tail: -1})
+	defer lw.ConsumerGone()
+
+	const messagesCount = 10000
+	// Log concurrently from two sources
+	wg.Add(2)
+	go logTo("stdout", messagesCount)
+	go logTo("stderr", messagesCount)
+	go func() {
+		defer l.Close()
+		wg.Wait()
+	}()
+
+	lastStdout := 0
+	lastStderr := 0
+
+	// Check if the message count, order and content is equal to what was logged
+	for {
+		l := readMessage(t, lw)
+		if l == nil {
+			break
+		}
+		var counter *int
+		if l.Source == "stdout" {
+			counter = &lastStdout
+		} else if l.Source == "stderr" {
+			counter = &lastStderr
+		} else {
+			t.Fatalf("Corrupted message.Source = %s", l.Source)
+		}
+
+		assert.Equal(t, strings.TrimSpace(string(l.Line)), string(msgLine(l.Source, *counter)))
+		assert.Equal(t, l.Timestamp.UTC(), msgTime(*counter).UTC())
+
+		*counter += 1
+	}
+
+	assert.Equal(t, lastStdout, messagesCount)
+	assert.Equal(t, lastStderr, messagesCount)
 }
 
 // logMessages logs messages to l and returns a slice of messages as would be
