@@ -68,7 +68,8 @@ func deleteTaskAndContainer(ctx context.Context, cli libcontainerdtypes.Client, 
 // Create creates a new container
 func (e *Executor) Create(id string, spec specs.Spec, stdout, stderr io.WriteCloser) error {
 	ctx := context.Background()
-	err := e.client.Create(ctx, id, &spec, e.runtime.Shim.Binary, e.runtime.Shim.Opts)
+	// TODO(rumpl): needs the image
+	err := e.client.Create(ctx, id, nil, &spec, e.runtime.Shim.Binary, e.runtime.Shim.Opts)
 	if err != nil {
 		status, err2 := e.client.Status(ctx, id)
 		if err2 != nil {
@@ -80,7 +81,7 @@ func (e *Executor) Create(id string, spec specs.Spec, stdout, stderr io.WriteClo
 				if err2 := e.client.Delete(ctx, id); err2 != nil && !errdefs.IsNotFound(err2) {
 					logrus.WithError(err2).WithField("plugin", id).Error("Error cleaning up containerd container")
 				}
-				err = e.client.Create(ctx, id, &spec, e.runtime.Shim.Binary, e.runtime.Shim.Opts)
+				err = e.client.Create(ctx, id, nil, &spec, e.runtime.Shim.Binary, e.runtime.Shim.Opts)
 			}
 		}
 

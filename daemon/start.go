@@ -142,9 +142,9 @@ func (daemon *Daemon) containerStart(ctx context.Context, container *container.C
 		}
 	}()
 
-	if err := daemon.conditionalMountOnStart(container); err != nil {
-		return err
-	}
+	// if err := daemon.conditionalMountOnStart(container); err != nil {
+	// 	return err
+	// }
 
 	if err := daemon.initializeNetworking(ctx, container); err != nil {
 		return err
@@ -176,7 +176,12 @@ func (daemon *Daemon) containerStart(ctx context.Context, container *container.C
 		return err
 	}
 
-	err = daemon.containerd.Create(ctx, container.ID, spec, shim, createOptions)
+	i, err := daemon.ImageService().GetContainerdImage(ctx, container.ImageID.String(), nil)
+	if err != nil {
+		return err
+	}
+
+	err = daemon.containerd.Create(ctx, container.ID, i, spec, shim, createOptions)
 	if err != nil {
 		if errdefs.IsConflict(err) {
 			logrus.WithError(err).WithField("container", container.ID).Error("Container not cleaned up from containerd from previous run")
@@ -185,7 +190,7 @@ func (daemon *Daemon) containerStart(ctx context.Context, container *container.C
 			if err := daemon.containerd.Delete(ctx, container.ID); err != nil && !errdefs.IsNotFound(err) {
 				logrus.WithError(err).WithField("container", container.ID).Error("Error cleaning up stale containerd container object")
 			}
-			err = daemon.containerd.Create(ctx, container.ID, spec, shim, createOptions)
+			err = daemon.containerd.Create(ctx, container.ID, i, spec, shim, createOptions)
 		}
 		if err != nil {
 			return translateContainerdStartErr(container.Path, container.SetExitCode, err)

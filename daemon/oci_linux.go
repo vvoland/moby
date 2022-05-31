@@ -713,17 +713,19 @@ func sysctlExists(s string) bool {
 // WithCommonOptions sets common docker options
 func WithCommonOptions(daemon *Daemon, c *container.Container) coci.SpecOpts {
 	return func(ctx context.Context, _ coci.Client, _ *containers.Container, s *coci.Spec) error {
-		if c.BaseFS == nil {
-			return errors.New("populateCommonSpec: BaseFS of container " + c.ID + " is unexpectedly nil")
-		}
+		// TODO(rumpl): containerd doesn't need BaseFS, we need a way to not do this only for containerd
+		// if c.BaseFS == nil {
+		// 	return errors.New("populateCommonSpec: BaseFS of container " + c.ID + " is unexpectedly nil")
+		// }
 		linkedEnv, err := daemon.setupLinkedContainers(c)
 		if err != nil {
 			return err
 		}
-		s.Root = &specs.Root{
-			Path:     c.BaseFS.Path(),
-			Readonly: c.HostConfig.ReadonlyRootfs,
-		}
+		// TODO(rumpl): containerd doesn't need the Root, we need a way to not do this only for containerd
+		// s.Root = &specs.Root{
+		// 	Path:     c.BaseFS.Path(),
+		// 	Readonly: c.HostConfig.ReadonlyRootfs,
+		// }
 		if err := c.SetupWorkingDirectory(daemon.idMapping.RootPair()); err != nil {
 			return err
 		}
@@ -1009,7 +1011,9 @@ func (daemon *Daemon) createSpec(ctx context.Context, c *container.Container) (r
 		WithResources(c),
 		WithSysctls(c),
 		WithDevices(daemon, c),
-		WithUser(c),
+		// TODO(rumpl): WithUser needs the BaseFS of the container but we don't
+		//				have it any more with the containerd content store...
+		// WithUser(c),
 		WithRlimits(daemon, c),
 		WithNamespaces(daemon, c),
 		WithCapabilities(c),

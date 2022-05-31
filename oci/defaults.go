@@ -42,7 +42,9 @@ func DefaultLinuxSpec() specs.Spec {
 				Effective:   caps.DefaultCapabilities(),
 			},
 		},
-		Root: &specs.Root{},
+		Root: &specs.Root{
+			Path: "rootfs",
+		},
 		Mounts: []specs.Mount{
 			{
 				Destination: "/proc",

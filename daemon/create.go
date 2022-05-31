@@ -109,7 +109,7 @@ func (daemon *Daemon) containerCreate(ctx context.Context, opts createOpts) (con
 }
 
 // Create creates a new container from the given configuration with a given name.
-func (daemon *Daemon) create(ctx context.Context, opts createOpts) (retC *container.Container, retErr error) {
+func (daemon *Daemon) create(ctx context.Context, opts createOpts) (_ *container.Container, retErr error) {
 	var (
 		ctr   *container.Container
 		img   *image.Image
@@ -127,7 +127,7 @@ func (daemon *Daemon) create(ctx context.Context, opts createOpts) (retC *contai
 		if !system.IsOSSupported(os) {
 			return nil, system.ErrNotSupportedOperatingSystem
 		}
-		imgID = img.ID()
+		imgID = image.ID(img.V1Image.ID)
 	} else if isWindows {
 		os = "linux" // 'scratch' case.
 	}
@@ -166,11 +166,11 @@ func (daemon *Daemon) create(ctx context.Context, opts createOpts) (retC *contai
 	ctr.HostConfig.StorageOpt = opts.params.HostConfig.StorageOpt
 
 	// Set RWLayer for container after mount labels have been set
-	rwLayer, err := daemon.imageService.CreateLayer(ctx, ctr, setupInitLayer(daemon.idMapping))
-	if err != nil {
-		return nil, errdefs.System(err)
-	}
-	ctr.RWLayer = rwLayer
+	// rwLayer, err := daemon.imageService.CreateLayer(ctx, ctr, setupInitLayer(daemon.idMapping))
+	// if err != nil {
+	// 	return nil, errdefs.System(err)
+	// }
+	// ctr.RWLayer = rwLayer
 
 	current := idtools.CurrentIdentity()
 	if err := idtools.MkdirAndChown(ctr.Root, 0710, idtools.Identity{UID: current.UID, GID: daemon.IdentityMapping().RootPair().GID}); err != nil {

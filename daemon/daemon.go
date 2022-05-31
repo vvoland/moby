@@ -115,6 +115,7 @@ type ImageServiceInterface interface {
 	ReleaseLayer(rwlayer layer.RWLayer) error
 	CommitImage(ctx context.Context, c backend.CommitConfig) (image.ID, error)
 	GetImage(ctx context.Context, refOrID string, platform *specs.Platform) (retImg *image.Image, retErr error)
+	GetContainerdImage(ctx context.Context, refOrID string, platform *specs.Platform) (retImg containerd.Image, retErr error)
 	CreateLayer(ctx context.Context, container *container.Container, initFunc layer.MountInit) (layer.RWLayer, error)
 	DistributionServices() images.DistributionServices
 	CountImages(ctx context.Context) (int, error)
@@ -1119,7 +1120,7 @@ func NewDaemon(ctx context.Context, config *config.Config, pluginStore *plugin.S
 
 	// TODO(rumpl): make the image store configurable
 	// d.imageService = images.NewImageService(imgSvcConfig)
-	d.imageService = containerdstore.New(*d.containerdCli)
+	d.imageService = containerdstore.New(d.containerdCli)
 	logrus.Debugf("Max Concurrent Downloads: %d", imgSvcConfig.MaxConcurrentDownloads)
 	logrus.Debugf("Max Concurrent Uploads: %d", imgSvcConfig.MaxConcurrentUploads)
 	logrus.Debugf("Max Download Attempts: %d", imgSvcConfig.MaxDownloadAttempts)

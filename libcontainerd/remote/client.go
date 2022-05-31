@@ -127,14 +127,17 @@ func (c *client) Restore(ctx context.Context, id string, attachStdio libcontaine
 	}, nil
 }
 
-func (c *client) Create(ctx context.Context, id string, ociSpec *specs.Spec, shim string, runtimeOptions interface{}, opts ...containerd.NewContainerOpts) error {
+func (c *client) Create(ctx context.Context, id string, image containerd.Image, ociSpec *specs.Spec, shim string, runtimeOptions interface{}, opts ...containerd.NewContainerOpts) error {
 	bdir := c.bundleDir(id)
 	c.logger.WithField("bundle", bdir).WithField("root", ociSpec.Root.Path).Debug("bundle dir created")
 
 	newOpts := []containerd.NewContainerOpts{
-		containerd.WithSpec(ociSpec),
 		containerd.WithRuntime(shim, runtimeOptions),
 		WithBundle(bdir, ociSpec),
+		containerd.WithImage(image),
+		containerd.WithSnapshotter("overlayfs"),
+		containerd.WithNewSnapshot(id, image),
+		containerd.WithSpec(ociSpec),
 	}
 	opts = append(opts, newOpts...)
 
