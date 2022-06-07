@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	ctrderr "github.com/containerd/containerd/errdefs"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/container"
 	"github.com/docker/docker/errdefs"
@@ -117,15 +118,10 @@ func (daemon *Daemon) cleanupContainer(ctx context.Context, container *container
 	}
 	container.Unlock()
 
-	// When container creation fails and `RWLayer` has not been created yet, we
-	// do not call `ReleaseRWLayer`
-	if container.RWLayer != nil {
-		if err := daemon.imageService.ReleaseLayer(container.RWLayer); err != nil {
-			err = errors.Wrapf(err, "container %s", container.ID)
-			container.SetRemovalError(err)
-			return err
-		}
-		container.RWLayer = nil
+	s := daemon.containerdCli.SnapshotService("overlayfs")
+	err := s.Remove(ctx, container.ID)
+	if err != nil && !ctrderr.IsNotFound(err) {
+		return err
 	}
 
 	if err := containerfs.EnsureRemoveAll(container.Root); err != nil {

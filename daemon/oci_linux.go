@@ -991,15 +991,6 @@ func WithSysctls(c *container.Container) coci.SpecOpts {
 	}
 }
 
-// WithUser sets the container's user
-func WithUser(c *container.Container) coci.SpecOpts {
-	return func(ctx context.Context, _ coci.Client, _ *containers.Container, s *coci.Spec) error {
-		var err error
-		s.Process.User, err = getUser(c, c.Config.User)
-		return err
-	}
-}
-
 func (daemon *Daemon) createSpec(ctx context.Context, c *container.Container) (retSpec *specs.Spec, err error) {
 	var (
 		opts []coci.SpecOpts
@@ -1011,9 +1002,6 @@ func (daemon *Daemon) createSpec(ctx context.Context, c *container.Container) (r
 		WithResources(c),
 		WithSysctls(c),
 		WithDevices(daemon, c),
-		// TODO(rumpl): WithUser needs the BaseFS of the container but we don't
-		//				have it any more with the containerd content store...
-		// WithUser(c),
 		WithRlimits(daemon, c),
 		WithNamespaces(daemon, c),
 		WithCapabilities(c),
@@ -1024,6 +1012,11 @@ func (daemon *Daemon) createSpec(ctx context.Context, c *container.Container) (r
 		WithSelinux(c),
 		WithOOMScore(&c.HostConfig.OomScoreAdj),
 	)
+
+	if c.Config.User != "" {
+		opts = append(opts, coci.WithUser(c.Config.User))
+	}
+
 	if c.NoNewPrivileges {
 		opts = append(opts, coci.WithNoNewPrivileges)
 	}
@@ -1038,8 +1031,10 @@ func (daemon *Daemon) createSpec(ctx context.Context, c *container.Container) (r
 	if daemon.configStore.Rootless {
 		opts = append(opts, WithRootless(daemon))
 	}
-	return &s, coci.ApplyOpts(ctx, nil, &containers.Container{
-		ID: c.ID,
+	return &s, coci.ApplyOpts(ctx, daemon.containerdCli, &containers.Container{
+		ID:          c.ID,
+		Snapshotter: "overlayfs",
+		SnapshotKey: c.ID,
 	}, &s, opts...)
 }
 

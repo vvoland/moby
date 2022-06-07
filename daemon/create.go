@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/containerd/containerd"
+	containerdimages "github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/platforms"
 	"github.com/docker/docker/api/types"
 	containertypes "github.com/docker/docker/api/types/container"
@@ -19,6 +21,7 @@ import (
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/docker/docker/pkg/system"
 	"github.com/docker/docker/runconfig"
+	"github.com/opencontainers/image-spec/identity"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/opencontainers/selinux/go-selinux"
 	"github.com/pkg/errors"
@@ -68,7 +71,7 @@ func (daemon *Daemon) containerCreate(ctx context.Context, opts createOpts) (con
 	}
 
 	if opts.params.Platform == nil && opts.params.Config.Image != "" {
-		if img, _ := daemon.imageService.GetImage(ctx, opts.params.Config.Image, opts.params.Platform); img != nil {
+		if _, img, _ := daemon.imageService.GetImage(ctx, opts.params.Config.Image, opts.params.Platform); img != nil {
 			p := platforms.DefaultSpec()
 			imgPlat := v1.Platform{
 				OS:           img.OS,
@@ -114,12 +117,13 @@ func (daemon *Daemon) create(ctx context.Context, opts createOpts) (_ *container
 		ctr   *container.Container
 		img   *image.Image
 		imgID image.ID
+		i     containerdimages.Image
 		err   error
 		os    = runtime.GOOS
 	)
 
 	if opts.params.Config.Image != "" {
-		img, err = daemon.imageService.GetImage(ctx, opts.params.Config.Image, opts.params.Platform)
+		i, img, err = daemon.imageService.GetImage(ctx, opts.params.Config.Image, opts.params.Platform)
 		if err != nil {
 			return nil, err
 		}
@@ -201,6 +205,18 @@ func (daemon *Daemon) create(ctx context.Context, opts createOpts) (_ *container
 		return nil, err
 	}
 	stateCtr.set(ctr.ID, "stopped")
+
+	ctrdimg := containerd.NewImage(daemon.containerdCli, i)
+	diffIDs, err := ctrdimg.RootFS(ctx)
+	if err != nil {
+		return nil, err
+	}
+	parent := identity.ChainID(diffIDs).String()
+	s := daemon.containerdCli.SnapshotService("overlayfs")
+	if _, err := s.Prepare(ctx, ctr.ID, parent); err != nil {
+		return nil, err
+	}
+
 	daemon.LogContainerEvent(ctr, "create")
 	return ctr, nil
 }

@@ -267,34 +267,34 @@ func (cs *containerdStore) CommitImage(ctx context.Context, c backend.CommitConf
 	panic("not implemented")
 }
 
-func (cs *containerdStore) GetImage(ctx context.Context, refOrID string, platform *ocispec.Platform) (retImg *image.Image, retErr error) {
+func (cs *containerdStore) GetImage(ctx context.Context, refOrID string, platform *ocispec.Platform) (im containerdimages.Image, retImg *image.Image, retErr error) {
 	desc, err := cs.ResolveImage(ctx, refOrID)
 	if err != nil {
-		return nil, err
+		return im, nil, err
 	}
 
-	im, err := cs.resolveImageName2(ctx, refOrID)
+	im, err = cs.resolveImageName2(ctx, refOrID)
 	if err != nil {
-		return nil, err
+		return im, nil, err
 	}
 	ii := containerd.NewImage(cs.client, im)
 	provider := cs.client.ContentStore()
 	conf, err := im.Config(ctx, provider, ii.Platform())
 	if err != nil {
-		return nil, err
+		return im, nil, err
 	}
 
 	var ociimage v1.Image
 	imageConfigBytes, err := content.ReadBlob(ctx, ii.ContentStore(), conf)
 	if err != nil {
-		return nil, err
+		return im, nil, err
 	}
 
 	if err := json.Unmarshal(imageConfigBytes, &ociimage); err != nil {
-		return nil, err
+		return im, nil, err
 	}
 
-	return &image.Image{
+	return im, &image.Image{
 		V1Image: image.V1Image{
 			ID:           string(desc.Digest),
 			OS:           ociimage.OS,

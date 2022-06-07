@@ -136,7 +136,7 @@ func (c *client) Create(ctx context.Context, id string, image containerd.Image, 
 		WithBundle(bdir, ociSpec),
 		containerd.WithImage(image),
 		containerd.WithSnapshotter("overlayfs"),
-		containerd.WithNewSnapshot(id, image),
+		containerd.WithSnapshot(id),
 		containerd.WithSpec(ociSpec),
 	}
 	opts = append(opts, newOpts...)

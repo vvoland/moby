@@ -20,6 +20,7 @@ import (
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/defaults"
+	containerdimages "github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/pkg/dialer"
 	"github.com/containerd/containerd/pkg/userns"
 	"github.com/containerd/containerd/remotes/docker"
@@ -114,7 +115,7 @@ type ImageServiceInterface interface {
 	LayerDiskUsage(ctx context.Context) (int64, error)
 	ReleaseLayer(rwlayer layer.RWLayer) error
 	CommitImage(ctx context.Context, c backend.CommitConfig) (image.ID, error)
-	GetImage(ctx context.Context, refOrID string, platform *specs.Platform) (retImg *image.Image, retErr error)
+	GetImage(ctx context.Context, refOrID string, platform *specs.Platform) (im containerdimages.Image, retImg *image.Image, retErr error)
 	GetContainerdImage(ctx context.Context, refOrID string, platform *specs.Platform) (retImg containerd.Image, retErr error)
 	CreateLayer(ctx context.Context, container *container.Container, initFunc layer.MountInit) (layer.RWLayer, error)
 	DistributionServices() images.DistributionServices
