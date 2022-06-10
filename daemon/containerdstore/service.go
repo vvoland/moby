@@ -15,6 +15,7 @@ import (
 	"github.com/containerd/containerd/images/archive"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/remotes"
+	"github.com/containerd/containerd/remotes/docker"
 	containertypes "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/pkg/progress"
 	"github.com/docker/docker/pkg/streamformatter"
@@ -396,7 +397,47 @@ func (cs *containerdStore) LookupImage(ctx context.Context, name string) (*types
 }
 
 func (cs *containerdStore) PushImage(ctx context.Context, image, tag string, metaHeaders map[string][]string, authConfig *types.AuthConfig, outStream io.Writer) error {
-	panic("not implemented")
+	ref, err := reference.ParseNormalizedNamed(image)
+	if err != nil {
+		return err
+	}
+	if tag != "" {
+		// Push by digest is not supported, so only tags are supported.
+		ref, err = reference.WithTag(ref, tag)
+		if err != nil {
+			return err
+		}
+	}
+
+	logrus.Infof("Pushing ref: %s", ref.String())
+
+	img, err := cs.client.ImageService().Get(ctx, ref.String())
+	if err != nil {
+		return errors.Wrap(err, "Failed to get image")
+	}
+
+	imageHandler := containerdimages.HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) (subdescs []ocispec.Descriptor, err error) {
+		logrus.Debugf("Push digest %s", desc.Digest.String())
+		return nil, nil
+	})
+	imageHandler = remotes.SkipNonDistributableBlobs(imageHandler)
+
+	authorizer := docker.NewDockerAuthorizer(docker.WithAuthCreds(func(s string) (string, string, error) {
+		if authConfig.IdentityToken != "" {
+			return "", authConfig.IdentityToken, nil
+		}
+		return authConfig.Username, authConfig.Password, nil
+	}))
+
+	resolver := docker.NewResolver(docker.ResolverOptions{
+		Hosts: docker.ConfigureDefaultRegistries(docker.WithAuthorizer(authorizer)),
+	})
+
+	return cs.client.Push(ctx, ref.String(), img.Target,
+		containerd.WithResolver(resolver),
+		containerd.WithPlatformMatcher(platforms.All),
+		containerd.WithImageHandler(imageHandler),
+	)
 }
 
 func (cs *containerdStore) SearchRegistryForImages(ctx context.Context, searchFilters filters.Args, term string, limit int, authConfig *types.AuthConfig, metaHeaders map[string][]string) (*registrytypes.SearchResults, error) {
