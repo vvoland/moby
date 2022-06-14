@@ -94,6 +94,18 @@ func (s *containerRouter) postContainerExecStart(ctx context.Context, w http.Res
 		return err
 	}
 
+	if execStartCheck.ConsoleSize != nil {
+		// Not supported before 1.42
+		if versions.LessThan(version, "1.42") {
+			execStartCheck.ConsoleSize = nil
+		}
+
+		// No console without tty
+		if !execStartCheck.Tty {
+			execStartCheck.ConsoleSize = nil
+		}
+	}
+
 	if !execStartCheck.Detach {
 		var err error
 		// Setting up the streaming http interface.
@@ -128,9 +140,10 @@ func (s *containerRouter) postContainerExecStart(ctx context.Context, w http.Res
 	}
 
 	options := types.ContainerExecStartOptions{
-		Stdin:  stdin,
-		Stdout: stdout,
-		Stderr: stderr,
+		Stdin:       stdin,
+		Stdout:      stdout,
+		Stderr:      stderr,
+		ConsoleSize: execStartCheck.ConsoleSize,
 	}
 
 	// Now run the user process in container.

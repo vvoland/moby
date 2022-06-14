@@ -238,10 +238,16 @@ func (daemon *Daemon) ContainerExecStart(ctx context.Context, name string, optio
 	p.Env = ec.Env
 	p.Cwd = ec.WorkingDir
 	p.Terminal = ec.Tty
-	if p.Terminal && ec.ConsoleSize != nil {
+
+	consoleSize := options.ConsoleSize
+	// If size isn't specified for start, use the one provided for create
+	if consoleSize == nil {
+		consoleSize = ec.ConsoleSize
+	}
+	if p.Terminal && consoleSize != nil {
 		p.ConsoleSize = &specs.Box{
-			Height: ec.ConsoleSize[0],
-			Width:  ec.ConsoleSize[1],
+			Height: consoleSize[0],
+			Width:  consoleSize[1],
 		}
 	}
 
