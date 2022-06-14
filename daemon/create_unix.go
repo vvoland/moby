@@ -27,10 +27,10 @@ func (daemon *Daemon) createContainerOSSpecificSettings(ctx context.Context, con
 	// }
 	// defer daemon.Unmount(container)
 
-	rootIDs := daemon.idMapping.RootPair()
-	if err := container.SetupWorkingDirectory(rootIDs); err != nil {
-		return err
-	}
+	//rootIDs := daemon.idMapping.RootPair()
+	//if err := container.SetupWorkingDirectory(rootIDs); err != nil {
+	//	return err
+	//}
 
 	// Set the default masked and readonly paths with regard to the host config options if they are not set.
 	if hostConfig.MaskedPaths == nil && !hostConfig.Privileged {

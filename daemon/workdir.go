@@ -9,14 +9,5 @@ import "context"
 // https://github.com/docker/docker/pull/28514 introduces this new functionality
 // where the builder calls into the backend here to create the working directory.
 func (daemon *Daemon) ContainerCreateWorkdir(ctx context.Context, cID string) error {
-	container, err := daemon.GetContainer(ctx, cID)
-	if err != nil {
-		return err
-	}
-	err = daemon.Mount(container)
-	if err != nil {
-		return err
-	}
-	defer daemon.Unmount(container)
-	return container.SetupWorkingDirectory(daemon.idMapping.RootPair())
+	panic("not implemented")
 }

@@ -29,7 +29,6 @@ import (
 	"github.com/docker/docker/image"
 	"github.com/docker/docker/layer"
 	"github.com/docker/docker/pkg/containerfs"
-	"github.com/docker/docker/pkg/idtools"
 	"github.com/docker/docker/pkg/ioutils"
 	"github.com/docker/docker/pkg/system"
 	"github.com/docker/docker/restartmanager"
@@ -262,30 +261,6 @@ func (container *Container) WriteHostConfig() (*containertypes.HostConfig, error
 		return nil, err
 	}
 	return &deepCopy, nil
-}
-
-// SetupWorkingDirectory sets up the container's working directory as set in container.Config.WorkingDir
-func (container *Container) SetupWorkingDirectory(rootIdentity idtools.Identity) error {
-	if container.Config.WorkingDir == "" {
-		return nil
-	}
-
-	container.Config.WorkingDir = filepath.Clean(container.Config.WorkingDir)
-	pth, err := container.GetResourcePath(container.Config.WorkingDir)
-	if err != nil {
-		return err
-	}
-
-	if err := idtools.MkdirAllAndChownNew(pth, 0755, rootIdentity); err != nil {
-		pthInfo, err2 := os.Stat(pth)
-		if err2 == nil && pthInfo != nil && !pthInfo.IsDir() {
-			return errors.Errorf("Cannot mkdir: %s is not a directory", container.Config.WorkingDir)
-		}
-
-		return err
-	}
-
-	return nil
 }
 
 // GetResourcePath evaluates `path` in the scope of the container's BaseFS, with proper path

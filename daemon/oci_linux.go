@@ -726,9 +726,6 @@ func WithCommonOptions(daemon *Daemon, c *container.Container) coci.SpecOpts {
 		// 	Path:     c.BaseFS.Path(),
 		// 	Readonly: c.HostConfig.ReadonlyRootfs,
 		// }
-		if err := c.SetupWorkingDirectory(daemon.idMapping.RootPair()); err != nil {
-			return err
-		}
 		cwd := c.Config.WorkingDir
 		if len(cwd) == 0 {
 			cwd = "/"
@@ -1015,6 +1012,10 @@ func (daemon *Daemon) createSpec(ctx context.Context, c *container.Container) (r
 
 	if c.Config.User != "" {
 		opts = append(opts, coci.WithUser(c.Config.User))
+	}
+
+	if c.Config.WorkingDir != "" {
+		opts = append(opts, coci.WithProcessCwd(c.Config.WorkingDir))
 	}
 
 	if c.NoNewPrivileges {
