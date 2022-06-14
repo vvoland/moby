@@ -6,12 +6,18 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"sync"
+	"time"
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/content"
 	containerdimages "github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/images/archive"
+	"github.com/containerd/containerd/log"
+	"github.com/containerd/containerd/remotes"
 	containertypes "github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/pkg/progress"
+	"github.com/docker/docker/pkg/streamformatter"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/sirupsen/logrus"
 
@@ -75,7 +81,21 @@ func (cs *containerdStore) PullImage(ctx context.Context, image, tag string, pla
 		}
 	}
 
-	img, err := cs.client.Pull(ctx, ref.String(), opts...)
+	jobs := NewJobs()
+	h := containerdimages.HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
+		if desc.MediaType != containerdimages.MediaTypeDockerSchema1Manifest {
+			jobs.Add(desc)
+		}
+		return nil, nil
+	})
+
+	stop := make(chan struct{})
+	go func() {
+		ShowProgress(ctx, jobs, cs.client.ContentStore(), outStream, stop)
+		stop <- struct{}{}
+	}()
+
+	img, err := cs.client.Pull(ctx, ref.String(), containerd.WithImageHandler(h))
 	if err != nil {
 		return err
 	}
@@ -90,7 +110,147 @@ func (cs *containerdStore) PullImage(ctx context.Context, image, tag string, pla
 			return err
 		}
 	}
+	stop <- struct{}{}
+	<-stop
 	return err
+}
+
+func ShowProgress(ctx context.Context, ongoing *Jobs, cs content.Store, w io.Writer, stop chan struct{}) {
+	var (
+		out    = streamformatter.NewJSONProgressOutput(w, false)
+		ticker = time.NewTicker(100 * time.Millisecond)
+		start  = time.Now()
+		done   bool
+	)
+	defer ticker.Stop()
+
+outer:
+	for {
+		select {
+		case <-ticker.C:
+			if !ongoing.IsResolved() {
+				continue
+			}
+
+			pulling := map[string]content.Status{}
+			if !done {
+				actives, err := cs.ListStatuses(ctx, "")
+				if err != nil {
+					log.G(ctx).WithError(err).Error("status check failed")
+					continue
+				}
+				// update status of status entries!
+				for _, status := range actives {
+					pulling[status.Ref] = status
+				}
+			}
+
+			// update inactive jobs
+			for _, j := range ongoing.Jobs() {
+				key := remotes.MakeRefKey(ctx, j)
+				if info, ok := pulling[key]; ok {
+					out.WriteProgress(progress.Progress{
+						ID:      j.Digest.Hex(),
+						Action:  "Downloading",
+						Current: info.Offset,
+						Total:   info.Total,
+					})
+					continue
+				}
+
+				info, err := cs.Info(ctx, j.Digest)
+				if err != nil {
+					if !cerrdefs.IsNotFound(err) {
+						log.G(ctx).WithError(err).Error("failed to get content info")
+						continue outer
+					}
+				} else if info.CreatedAt.After(start) {
+					out.WriteProgress(progress.Progress{
+						ID:         j.Digest.Hex(),
+						Action:     "Download complete",
+						HideCounts: true,
+						LastUpdate: true,
+					})
+					ongoing.Remove(j)
+				} else {
+					out.WriteProgress(progress.Progress{
+						ID:         j.Digest.Hex(),
+						Action:     "Exists",
+						HideCounts: true,
+						LastUpdate: true,
+					})
+					ongoing.Remove(j)
+				}
+			}
+			if done {
+				return
+			}
+		case <-stop:
+			done = true // allow ui to update once more
+		}
+	}
+}
+
+type StatusInfo struct {
+	Ref       string
+	Status    string
+	Offset    int64
+	Total     int64
+	StartedAt time.Time
+	UpdatedAt time.Time
+}
+
+type Jobs struct {
+	name     string
+	resolved bool
+	descs    map[digest.Digest]ocispec.Descriptor
+	mu       sync.Mutex
+}
+
+// NewJobs creates a new instance of the job status tracker
+func NewJobs() *Jobs {
+	return &Jobs{
+		descs: map[digest.Digest]ocispec.Descriptor{},
+	}
+}
+
+// IsResolved checks whether a descriptor has been resolved
+func (j *Jobs) IsResolved() bool {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return j.resolved
+}
+
+// Add adds a descriptor to be tracked
+func (j *Jobs) Add(desc ocispec.Descriptor) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+
+	if _, ok := j.descs[desc.Digest]; ok {
+		return
+	}
+	j.descs[desc.Digest] = desc
+	j.resolved = true
+}
+
+// Remove removes a descriptor
+func (j *Jobs) Remove(desc ocispec.Descriptor) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+
+	delete(j.descs, desc.Digest)
+}
+
+// Jobs returns a list of all tracked descriptors
+func (j *Jobs) Jobs() []ocispec.Descriptor {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+
+	descs := make([]ocispec.Descriptor, 0, len(j.descs))
+	for _, d := range j.descs {
+		descs = append(descs, d)
+	}
+	return descs
 }
 
 func (cs *containerdStore) Images(ctx context.Context, opts types.ImageListOptions) ([]*types.ImageSummary, error) {
