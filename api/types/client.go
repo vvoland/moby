@@ -57,6 +57,13 @@ type ContainerExecInspect struct {
 	Pid         int
 }
 
+// ExecStartOptions holds the options to start container's exec
+type ContainerExecStartOptions struct {
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
+}
+
 // ContainerListOptions holds parameters to list containers with.
 type ContainerListOptions struct {
 	Size    bool

@@ -151,7 +151,7 @@ func (daemon *Daemon) ContainerExecCreate(name string, config *types.ExecConfig)
 // ContainerExecStart starts a previously set up exec instance. The
 // std streams are set up.
 // If ctx is cancelled, the process is terminated.
-func (daemon *Daemon) ContainerExecStart(ctx context.Context, name string, stdin io.Reader, stdout io.Writer, stderr io.Writer) (err error) {
+func (daemon *Daemon) ContainerExecStart(ctx context.Context, name string, options types.ContainerExecStartOptions) (err error) {
 	var (
 		cStdin           io.ReadCloser
 		cStdout, cStderr io.Writer
@@ -200,20 +200,20 @@ func (daemon *Daemon) ContainerExecStart(ctx context.Context, name string, stdin
 		}
 	}()
 
-	if ec.OpenStdin && stdin != nil {
+	if ec.OpenStdin && options.Stdin != nil {
 		r, w := io.Pipe()
 		go func() {
 			defer w.Close()
 			defer logrus.Debug("Closing buffered stdin pipe")
-			pools.Copy(w, stdin)
+			pools.Copy(w, options.Stdin)
 		}()
 		cStdin = r
 	}
 	if ec.OpenStdout {
-		cStdout = stdout
+		cStdout = options.Stdout
 	}
 	if ec.OpenStderr {
-		cStderr = stderr
+		cStderr = options.Stderr
 	}
 
 	if ec.OpenStdin {
