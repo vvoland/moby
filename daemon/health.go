@@ -97,7 +97,13 @@ func (p *cmdProbe) run(ctx context.Context, d *Daemon, cntr *container.Container
 	probeCtx, cancelProbe := context.WithCancel(ctx)
 	defer cancelProbe()
 	execErr := make(chan error, 1)
-	go func() { execErr <- d.ContainerExecStart(probeCtx, execConfig.ID, nil, output, output) }()
+
+	options := types.ContainerExecStartOptions{
+		Stdout: output,
+		Stderr: output,
+	}
+
+	go func() { execErr <- d.ContainerExecStart(probeCtx, execConfig.ID, options) }()
 
 	// Starting an exec can take a significant amount of time: on the order
 	// of 1s in extreme cases. The time it takes dockerd and containerd to

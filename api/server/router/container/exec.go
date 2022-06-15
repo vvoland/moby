@@ -46,6 +46,12 @@ func (s *containerRouter) postContainerExecCreate(ctx context.Context, w http.Re
 		return execCommandError{}
 	}
 
+	version := httputils.VersionFromContext(ctx)
+	if versions.LessThan(version, "1.42") {
+		// Not supported by API versions before 1.42
+		execConfig.ConsoleSize = nil
+	}
+
 	// Register an instance of Exec in container.
 	id, err := s.backend.ContainerExecCreate(vars["name"], execConfig)
 	if err != nil {
@@ -88,6 +94,18 @@ func (s *containerRouter) postContainerExecStart(ctx context.Context, w http.Res
 		return err
 	}
 
+	if execStartCheck.ConsoleSize != nil {
+		// Not supported before 1.42
+		if versions.LessThan(version, "1.42") {
+			execStartCheck.ConsoleSize = nil
+		}
+
+		// No console without tty
+		if !execStartCheck.Tty {
+			execStartCheck.ConsoleSize = nil
+		}
+	}
+
 	if !execStartCheck.Detach {
 		var err error
 		// Setting up the streaming http interface.
@@ -121,9 +139,16 @@ func (s *containerRouter) postContainerExecStart(ctx context.Context, w http.Res
 		}
 	}
 
+	options := types.ContainerExecStartOptions{
+		Stdin:       stdin,
+		Stdout:      stdout,
+		Stderr:      stderr,
+		ConsoleSize: execStartCheck.ConsoleSize,
+	}
+
 	// Now run the user process in container.
 	// Maybe we should we pass ctx here if we're not detaching?
-	if err := s.backend.ContainerExecStart(context.Background(), execName, stdin, stdout, stderr); err != nil {
+	if err := s.backend.ContainerExecStart(context.Background(), execName, options); err != nil {
 		if execStartCheck.Detach {
 			return err
 		}
