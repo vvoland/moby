@@ -57,14 +57,6 @@ type ContainerExecInspect struct {
 	Pid         int
 }
 
-// ContainerExecStartOptions holds the options to start container's exec
-type ContainerExecStartOptions struct {
-	Stdin       io.Reader
-	Stdout      io.Writer
-	Stderr      io.Writer
-	ConsoleSize *[2]uint `json:",omitempty"`
-}
-
 // ContainerListOptions holds parameters to list containers with.
 type ContainerListOptions struct {
 	Size    bool
