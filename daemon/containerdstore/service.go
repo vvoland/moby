@@ -18,6 +18,7 @@ import (
 	containertypes "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/pkg/progress"
 	"github.com/docker/docker/pkg/streamformatter"
+	"github.com/docker/docker/pkg/stringid"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/sirupsen/logrus"
 
@@ -150,7 +151,7 @@ outer:
 				key := remotes.MakeRefKey(ctx, j)
 				if info, ok := pulling[key]; ok {
 					out.WriteProgress(progress.Progress{
-						ID:      j.Digest.Hex(),
+						ID:      stringid.TruncateID(j.Digest.Encoded()),
 						Action:  "Downloading",
 						Current: info.Offset,
 						Total:   info.Total,
@@ -166,7 +167,7 @@ outer:
 					}
 				} else if info.CreatedAt.After(start) {
 					out.WriteProgress(progress.Progress{
-						ID:         j.Digest.Hex(),
+						ID:         stringid.TruncateID(j.Digest.Encoded()),
 						Action:     "Download complete",
 						HideCounts: true,
 						LastUpdate: true,
@@ -174,7 +175,7 @@ outer:
 					ongoing.Remove(j)
 				} else {
 					out.WriteProgress(progress.Progress{
-						ID:         j.Digest.Hex(),
+						ID:         stringid.TruncateID(j.Digest.Encoded()),
 						Action:     "Exists",
 						HideCounts: true,
 						LastUpdate: true,
