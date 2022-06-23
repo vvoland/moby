@@ -377,10 +377,6 @@ func (cs *containerdStore) ImageHistory(ctx context.Context, name string) ([]*im
 	panic("not implemented")
 }
 
-func (cs *containerdStore) ImagesPrune(ctx context.Context, pruneFilters filters.Args) (*types.ImagesPruneReport, error) {
-	panic("not implemented")
-}
-
 func (cs *containerdStore) ImportImage(ctx context.Context, src string, repository string, platform *ocispec.Platform, tag string, msg string, inConfig io.ReadCloser, outStream io.Writer, changes []string) error {
 	panic("not implemented")
 }
