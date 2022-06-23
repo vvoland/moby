@@ -409,35 +409,70 @@ func (cs *containerdStore) PushImage(ctx context.Context, image, tag string, met
 		}
 	}
 
-	logrus.Infof("Pushing ref: %s", ref.String())
+	is := cs.client.ImageService()
 
-	img, err := cs.client.ImageService().Get(ctx, ref.String())
+	img, err := is.Get(ctx, ref.String())
 	if err != nil {
 		return errors.Wrap(err, "Failed to get image")
 	}
 
+	platformMatcher := platforms.DefaultStrict()
+
+	target := img.Target
+
+	// If the image is an index/manifest list, then push only default platform.
+	// We don't want to push other platforms, because pull only fetches the default platform
+	// and manifest list includes other platforms, which we or the remote repository may not have.
+	if containerdimages.IsIndexType(img.Target.MediaType) {
+		children, err := containerdimages.Children(ctx, cs.client.ContentStore(), img.Target)
+		if err != nil {
+			return err
+		}
+
+		for _, child := range children {
+			if child.Platform == nil {
+				continue
+			}
+
+			if platformMatcher.Match(*child.Platform) {
+				target = child
+			}
+		}
+	}
+
 	imageHandler := containerdimages.HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) (subdescs []ocispec.Descriptor, err error) {
-		logrus.Debugf("Push digest %s", desc.Digest.String())
+		logrus.WithField("desc", desc).Debug("Push, handle digest")
 		return nil, nil
 	})
 	imageHandler = remotes.SkipNonDistributableBlobs(imageHandler)
 
-	authorizer := docker.NewDockerAuthorizer(docker.WithAuthCreds(func(s string) (string, string, error) {
-		if authConfig.IdentityToken != "" {
-			return "", authConfig.IdentityToken, nil
-		}
-		return authConfig.Username, authConfig.Password, nil
-	}))
+	resolver := newResolverFromAuthConfig(authConfig)
 
-	resolver := docker.NewResolver(docker.ResolverOptions{
-		Hosts: docker.ConfigureDefaultRegistries(docker.WithAuthorizer(authorizer)),
-	})
-
-	return cs.client.Push(ctx, ref.String(), img.Target,
+	log.G(ctx).WithField("desc", target).WithField("ref", ref.String()).Info("Pushing desc to remote ref")
+	return cs.client.Push(ctx, ref.String(), target,
 		containerd.WithResolver(resolver),
-		containerd.WithPlatformMatcher(platforms.All),
+		containerd.WithPlatformMatcher(platformMatcher),
 		containerd.WithImageHandler(imageHandler),
 	)
+}
+
+func newResolverFromAuthConfig(authConfig *types.AuthConfig) remotes.Resolver {
+	opts := []docker.RegistryOpt{}
+
+	if authConfig != nil {
+		authorizer := docker.NewDockerAuthorizer(docker.WithAuthCreds(func(s string) (string, string, error) {
+			if authConfig.IdentityToken != "" {
+				return "", authConfig.IdentityToken, nil
+			}
+			return authConfig.Username, authConfig.Password, nil
+		}))
+
+		opts = append(opts, docker.WithAuthorizer(authorizer))
+	}
+
+	return docker.NewResolver(docker.ResolverOptions{
+		Hosts: docker.ConfigureDefaultRegistries(opts...),
+	})
 }
 
 func (cs *containerdStore) SearchRegistryForImages(ctx context.Context, searchFilters filters.Args, term string, limit int, authConfig *types.AuthConfig, metaHeaders map[string][]string) (*registrytypes.SearchResults, error) {
