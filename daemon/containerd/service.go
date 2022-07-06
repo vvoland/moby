@@ -74,7 +74,7 @@ func (cs *containerdStore) PullImage(ctx context.Context, image, tag string, pla
 		}
 	}
 
-	resolver := newResolverFromAuthConfig(authConfig)
+	resolver, _ := newResolverFromAuthConfig(authConfig)
 	opts = append(opts, containerd.WithResolver(resolver))
 
 	jobs := newJobs()
@@ -86,11 +86,8 @@ func (cs *containerdStore) PullImage(ctx context.Context, image, tag string, pla
 	})
 	opts = append(opts, containerd.WithImageHandler(h))
 
-	stop := make(chan struct{})
-	go func() {
-		showProgress(ctx, jobs, cs.client.ContentStore(), outStream, stop)
-		stop <- struct{}{}
-	}()
+	finishProgress := showProgress(ctx, jobs, outStream, pullProgress(cs.client.ContentStore()))
+	defer finishProgress()
 
 	img, err := cs.client.Pull(ctx, ref.String(), opts...)
 	if err != nil {
@@ -107,8 +104,6 @@ func (cs *containerdStore) PullImage(ctx context.Context, image, tag string, pla
 			return err
 		}
 	}
-	stop <- struct{}{}
-	<-stop
 	return err
 }
 
@@ -279,8 +274,9 @@ func (cs *containerdStore) setupFilters(ctx context.Context, opts types.ImageLis
 	return filters, nil
 }
 
-func newResolverFromAuthConfig(authConfig *types.AuthConfig) remotes.Resolver {
+func newResolverFromAuthConfig(authConfig *types.AuthConfig) (remotes.Resolver, docker.StatusTracker) {
 	opts := []docker.RegistryOpt{}
+
 	if authConfig != nil {
 		authorizer := docker.NewDockerAuthorizer(docker.WithAuthCreds(func(_ string) (string, string, error) {
 			if authConfig.IdentityToken != "" {
@@ -292,9 +288,12 @@ func newResolverFromAuthConfig(authConfig *types.AuthConfig) remotes.Resolver {
 		opts = append(opts, docker.WithAuthorizer(authorizer))
 	}
 
+	tracker := docker.NewInMemoryTracker()
+
 	return docker.NewResolver(docker.ResolverOptions{
-		Hosts: docker.ConfigureDefaultRegistries(opts...),
-	})
+		Hosts:   docker.ConfigureDefaultRegistries(opts...),
+		Tracker: tracker,
+	}), tracker
 }
 
 func (cs *containerdStore) LogImageEvent(imageID, refName, action string) {
@@ -465,6 +464,7 @@ func (cs *containerdStore) PushImage(ctx context.Context, image, tag string, met
 	}
 
 	is := cs.client.ImageService()
+	store := cs.client.ContentStore()
 
 	img, err := is.Get(ctx, ref.String())
 	if err != nil {
@@ -486,13 +486,29 @@ func (cs *containerdStore) PushImage(ctx context.Context, image, tag string, met
 		defer cs.client.ImageService().Delete(ctx, platformImg.Name, containerdimages.SynchronousDelete())
 	}
 
+	jobs := newJobs()
+
 	imageHandler := containerdimages.HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) (subdescs []ocispec.Descriptor, err error) {
 		logrus.WithField("desc", desc).Debug("Pushing")
+		if desc.MediaType != containerdimages.MediaTypeDockerSchema1Manifest {
+			children, err := containerdimages.Children(ctx, store, desc)
+
+			if err == nil {
+				for _, c := range children {
+					jobs.Add(c)
+				}
+			}
+
+			jobs.Add(desc)
+		}
 		return nil, nil
 	})
 	imageHandler = remotes.SkipNonDistributableBlobs(imageHandler)
 
-	resolver := newResolverFromAuthConfig(authConfig)
+	resolver, tracker := newResolverFromAuthConfig(authConfig)
+
+	finishProgress := showProgress(ctx, jobs, outStream, pushProgress(tracker))
+	defer finishProgress()
 
 	logrus.WithField("desc", target).WithField("ref", ref.String()).Info("Pushing desc to remote ref")
 	err = cs.client.Push(ctx, ref.String(), target,
