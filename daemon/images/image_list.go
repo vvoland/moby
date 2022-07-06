@@ -49,7 +49,7 @@ func (i *ImageService) Images(_ context.Context, opts types.ImageListOptions) ([
 		err                       error
 	)
 	err = opts.Filters.WalkValues("before", func(value string) error {
-		beforeFilter, err = i.GetImage(value, nil)
+		beforeFilter, err = i.GetImage(nil, value, nil)
 		return err
 	})
 	if err != nil {
@@ -57,7 +57,7 @@ func (i *ImageService) Images(_ context.Context, opts types.ImageListOptions) ([
 	}
 
 	err = opts.Filters.WalkValues("since", func(value string) error {
-		sinceFilter, err = i.GetImage(value, nil)
+		sinceFilter, err = i.GetImage(nil, value, nil)
 		return err
 	})
 	if err != nil {

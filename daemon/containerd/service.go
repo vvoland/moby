@@ -83,7 +83,7 @@ func (i *ImageService) Cleanup() error {
 // - newContainer
 // - to report an error in Daemon.Mount(container)
 func (i *ImageService) GraphDriverName() string {
-	return ""
+	return "containerd-snapshotter"
 }
 
 // ReleaseLayer releases a layer allowing it to be removed
