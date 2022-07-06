@@ -63,15 +63,29 @@ func (cs *containerdStore) PullImage(ctx context.Context, image, tag string, pla
 	return err
 }
 
+type imageFilterFunc func(image containerd.Image) bool
+
 func (cs *containerdStore) Images(ctx context.Context, opts types.ImageListOptions) ([]*types.ImageSummary, error) {
 	images, err := cs.client.ListImages(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	var ret []*types.ImageSummary
+	filters, err := cs.setupFilters(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+
 	snapshotter := cs.client.SnapshotService(containerd.DefaultSnapshotter)
+	var ret []*types.ImageSummary
+IMAGES:
 	for _, image := range images {
+		for _, filter := range filters {
+			if !filter(image) {
+				continue IMAGES
+			}
+		}
+
 		size, err := image.Size(ctx)
 		if err != nil {
 			return nil, err
@@ -112,6 +126,54 @@ func computeVirtualSize(ctx context.Context, image containerd.Image, snapshotter
 		virtualSize += usage.Size
 	}
 	return virtualSize, nil
+}
+
+func (cs *containerdStore) setupFilters(ctx context.Context, opts types.ImageListOptions) ([]imageFilterFunc, error) {
+	var filters []imageFilterFunc
+	err := opts.Filters.WalkValues("before", func(value string) error {
+		ref, err := reference.ParseDockerRef(value)
+		if err != nil {
+			return err
+		}
+		img, err := cs.client.GetImage(ctx, ref.String())
+		if img != nil {
+			t := img.Metadata().CreatedAt
+			filters = append(filters, func(image containerd.Image) bool {
+				created := image.Metadata().CreatedAt
+				return created.Equal(t) || created.After(t)
+			})
+		}
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	err = opts.Filters.WalkValues("since", func(value string) error {
+		ref, err := reference.ParseDockerRef(value)
+		if err != nil {
+			return err
+		}
+		img, err := cs.client.GetImage(ctx, ref.String())
+		if img != nil {
+			t := img.Metadata().CreatedAt
+			filters = append(filters, func(image containerd.Image) bool {
+				created := image.Metadata().CreatedAt
+				return created.Equal(t) || created.Before(t)
+			})
+		}
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if opts.Filters.Contains("label") {
+		filters = append(filters, func(image containerd.Image) bool {
+			return opts.Filters.MatchKVList("label", image.Labels())
+		})
+	}
+	return filters, nil
 }
 
 func (cs *containerdStore) LogImageEvent(imageID, refName, action string) {
