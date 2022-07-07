@@ -8,6 +8,8 @@ import (
 	"github.com/containerd/containerd/images/archive"
 	"github.com/containerd/containerd/platforms"
 	"github.com/docker/distribution/reference"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 // ExportImage exports a list of images to the given output stream. The
@@ -35,8 +37,30 @@ func (i *ImageService) ExportImage(ctx context.Context, names []string, outStrea
 // complement of ExportImage.  The input stream is an uncompressed tar
 // ball containing images and metadata.
 func (i *ImageService) LoadImage(ctx context.Context, inTar io.ReadCloser, outStream io.Writer, quiet bool) error {
-	_, err := i.client.Import(ctx, inTar,
-		containerd.WithImportPlatform(platforms.DefaultStrict()),
-	)
-	return err
+	platform := platforms.DefaultStrict()
+	imgs, err := i.client.Import(ctx, inTar, containerd.WithImportPlatform(platform))
+
+	if err != nil {
+		logrus.WithError(err).Error("Failed to import image to containerd")
+		return errors.Wrapf(err, "Failed to import image")
+	}
+
+	for _, img := range imgs {
+		platformImg := containerd.NewImageWithPlatform(i.client, img, platform)
+
+		unpacked, err := platformImg.IsUnpacked(ctx, containerd.DefaultSnapshotter)
+		if err != nil {
+			logrus.WithError(err).WithField("image", img.Name).Error("IsUnpacked failed")
+			continue
+		}
+
+		if !unpacked {
+			err := platformImg.Unpack(ctx, containerd.DefaultSnapshotter)
+			if err != nil {
+				logrus.WithError(err).WithField("image", img.Name).Error("Failed to unpack image")
+				return errors.Wrapf(err, "Failed to unpack image")
+			}
+		}
+	}
+	return nil
 }
