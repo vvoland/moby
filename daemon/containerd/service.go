@@ -6,6 +6,8 @@ import (
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/platforms"
+	"github.com/containerd/containerd/remotes"
+	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/docker/distribution"
 	"github.com/docker/distribution/reference"
@@ -58,6 +60,9 @@ func (cs *containerdStore) PullImage(ctx context.Context, image, tag string, pla
 			return errdefs.InvalidParameter(err)
 		}
 	}
+
+	resolver := newResolverFromAuthConfig(authConfig)
+	opts = append(opts, containerd.WithResolver(resolver))
 
 	_, err = cs.client.Pull(ctx, ref.String(), opts...)
 	return err
@@ -174,6 +179,24 @@ func (cs *containerdStore) setupFilters(ctx context.Context, opts types.ImageLis
 		})
 	}
 	return filters, nil
+}
+
+func newResolverFromAuthConfig(authConfig *types.AuthConfig) remotes.Resolver {
+	opts := []docker.RegistryOpt{}
+	if authConfig != nil {
+		authorizer := docker.NewDockerAuthorizer(docker.WithAuthCreds(func(_ string) (string, string, error) {
+			if authConfig.IdentityToken != "" {
+				return "", authConfig.IdentityToken, nil
+			}
+			return authConfig.Username, authConfig.Password, nil
+		}))
+
+		opts = append(opts, docker.WithAuthorizer(authorizer))
+	}
+
+	return docker.NewResolver(docker.ResolverOptions{
+		Hosts: docker.ConfigureDefaultRegistries(opts...),
+	})
 }
 
 func (cs *containerdStore) LogImageEvent(imageID, refName, action string) {
