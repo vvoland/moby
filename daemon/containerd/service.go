@@ -14,7 +14,6 @@ import (
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
-	"github.com/containerd/containerd/snapshots"
 	"github.com/docker/distribution"
 	"github.com/docker/distribution/reference"
 	"github.com/docker/docker/api/types"
@@ -125,12 +124,45 @@ func (cs *containerdStore) Images(ctx context.Context, opts types.ImageListOptio
 	}
 
 	snapshotter := cs.client.SnapshotService(containerd.DefaultSnapshotter)
-	var ret []*types.ImageSummary
+	sizeCache := make(map[digest.Digest]int64)
+	snapshotSizeFn := func(d digest.Digest) (int64, error) {
+		if s, ok := sizeCache[d]; ok {
+			return s, nil
+		}
+		usage, err := snapshotter.Usage(ctx, d.String())
+		if err != nil {
+			return 0, err
+		}
+		sizeCache[d] = usage.Size
+		return usage.Size, nil
+	}
+
+	ret := make([]*types.ImageSummary, 0, len(images))
+	var (
+		root   []*[]digest.Digest
+		layers map[digest.Digest]int
+	)
+	if opts.SharedSize {
+		root = make([]*[]digest.Digest, len(images))
+		layers = make(map[digest.Digest]int)
+	}
 IMAGES:
-	for _, image := range images {
+	for i, image := range images {
 		for _, filter := range filters {
 			if !filter(image) {
 				continue IMAGES
+			}
+		}
+
+		diffIDs, err := image.RootFS(ctx)
+		if err != nil {
+			return nil, err
+		}
+		chainIDs := identity.ChainIDs(diffIDs)
+		if opts.SharedSize {
+			root[i] = &chainIDs
+			for _, id := range chainIDs {
+				layers[id] = layers[id] + 1
 			}
 		}
 
@@ -139,7 +171,7 @@ IMAGES:
 			return nil, err
 		}
 
-		virtualSize, err := computeVirtualSize(ctx, image, snapshotter)
+		virtualSize, err := computeVirtualSize(chainIDs, snapshotSizeFn)
 		if err != nil {
 			return nil, err
 		}
@@ -157,23 +189,44 @@ IMAGES:
 		})
 	}
 
+	if opts.SharedSize {
+		for i, chainIDs := range root {
+			sharedSize, err := computeSharedSize(*chainIDs, layers, snapshotSizeFn)
+			if err != nil {
+				return nil, err
+			}
+			ret[i].SharedSize = sharedSize
+		}
+	}
+
 	return ret, nil
 }
 
-func computeVirtualSize(ctx context.Context, image containerd.Image, snapshotter snapshots.Snapshotter) (int64, error) {
+func computeVirtualSize(chainIDs []digest.Digest, sizeFn func(d digest.Digest) (int64, error)) (int64, error) {
 	var virtualSize int64
-	diffIDs, err := image.RootFS(ctx)
-	if err != nil {
-		return virtualSize, err
-	}
-	for _, chainID := range identity.ChainIDs(diffIDs) {
-		usage, err := snapshotter.Usage(ctx, chainID.String())
+	for _, chainID := range chainIDs {
+		size, err := sizeFn(chainID)
 		if err != nil {
 			return virtualSize, err
 		}
-		virtualSize += usage.Size
+		virtualSize += size
 	}
 	return virtualSize, nil
+}
+
+func computeSharedSize(chainIDs []digest.Digest, layers map[digest.Digest]int, sizeFn func(d digest.Digest) (int64, error)) (int64, error) {
+	var sharedSize int64
+	for _, chainID := range chainIDs {
+		if layers[chainID] == 1 {
+			continue
+		}
+		size, err := sizeFn(chainID)
+		if err != nil {
+			return 0, err
+		}
+		sharedSize += size
+	}
+	return sharedSize, nil
 }
 
 func (cs *containerdStore) setupFilters(ctx context.Context, opts types.ImageListOptions) ([]imageFilterFunc, error) {
