@@ -349,7 +349,38 @@ func (cs *containerdStore) SearchRegistryForImages(ctx context.Context, searchFi
 }
 
 func (cs *containerdStore) TagImage(imageName, repository, tag string) (string, error) {
-	panic("not implemented")
+	ctx := context.Background()
+
+	newTag, err := reference.ParseNormalizedNamed(repository)
+	if err != nil {
+		return "", err
+	}
+	if tag != "" {
+		if newTag, err = reference.WithTag(reference.TrimNamed(newTag), tag); err != nil {
+			return "", err
+		}
+	}
+
+	imageRef, err := reference.ParseAnyReference(imageName)
+	if err != nil {
+		return "", err
+	}
+
+	is := cs.client.ImageService()
+	image, err := is.Get(ctx, imageRef.String())
+	if err != nil {
+		return "", err
+	}
+
+	image.Name = newTag.String()
+
+	_, err = is.Create(ctx, image)
+	if err != nil {
+		return "", err
+	}
+
+	logrus.WithField("image", image).WithField("newTag", newTag.String()).Info("Image tagged")
+	return reference.FamiliarString(newTag), nil
 }
 
 func (cs *containerdStore) GetRepository(context.Context, reference.Named, *types.AuthConfig) (distribution.Repository, error) {
