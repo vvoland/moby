@@ -733,10 +733,6 @@ func WithCommonOptions(daemon *Daemon, c *container.Container) coci.SpecOpts {
 				Readonly: c.HostConfig.ReadonlyRootfs,
 			}
 		}
-		s.Root = &specs.Root{
-			Path:     c.BaseFS.Path(),
-			Readonly: c.HostConfig.ReadonlyRootfs,
-		}
 		if err := c.SetupWorkingDirectory(daemon.idMapping.RootPair()); err != nil {
 			return err
 		}
