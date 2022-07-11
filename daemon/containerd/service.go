@@ -34,6 +34,7 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 var shortID = regexp.MustCompile(`^([a-f0-9]{4,64})$`)
@@ -289,8 +290,23 @@ func (cs *containerdStore) MakeImageCache(ctx context.Context, cacheFrom []strin
 	panic("not implemented")
 }
 
-func (cs *containerdStore) TagImageWithReference(imageID image.ID, newTag reference.Named) error {
-	panic("not implemented")
+func (cs *containerdStore) TagImageWithReference(ctx context.Context, imageID image.ID, newTag reference.Named) error {
+	logrus.Infof("Tagging image %q with reference %q", imageID, newTag.String())
+
+	desc, err := cs.ResolveImage(ctx, imageID.String())
+	if err != nil {
+		return err
+	}
+
+	img := containerdimages.Image{
+		Name:   newTag.String(),
+		Target: desc,
+	}
+
+	is := cs.client.ImageService()
+	_, err = is.Create(ctx, img)
+
+	return err
 }
 
 func (cs *containerdStore) SquashImage(id, parent string) (string, error) {
@@ -348,8 +364,24 @@ func (cs *containerdStore) SearchRegistryForImages(ctx context.Context, searchFi
 	panic("not implemented")
 }
 
-func (cs *containerdStore) TagImage(imageName, repository, tag string) (string, error) {
-	panic("not implemented")
+func (cs *containerdStore) TagImage(ctx context.Context, imageName, repository, tag string) (string, error) {
+	desc, err := cs.ResolveImage(ctx, imageName)
+	if err != nil {
+		return "", err
+	}
+
+	newTag, err := reference.ParseNormalizedNamed(repository)
+	if err != nil {
+		return "", err
+	}
+	if tag != "" {
+		if newTag, err = reference.WithTag(reference.TrimNamed(newTag), tag); err != nil {
+			return "", err
+		}
+	}
+
+	err = cs.TagImageWithReference(ctx, image.ID(desc.Digest), newTag)
+	return reference.FamiliarString(newTag), err
 }
 
 func (cs *containerdStore) GetRepository(context.Context, reference.Named, *types.AuthConfig) (distribution.Repository, error) {
