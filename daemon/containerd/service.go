@@ -11,6 +11,7 @@ import (
 	"github.com/containerd/containerd/content"
 	cerrdefs "github.com/containerd/containerd/errdefs"
 	containerdimages "github.com/containerd/containerd/images"
+	"github.com/containerd/containerd/images/archive"
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
@@ -313,8 +314,20 @@ func (cs *containerdStore) SquashImage(id, parent string) (string, error) {
 	panic("not implemented")
 }
 
-func (cs *containerdStore) ExportImage(names []string, outStream io.Writer) error {
-	panic("not implemented")
+func (cs *containerdStore) ExportImage(ctx context.Context, names []string, outStream io.Writer) error {
+	opts := []archive.ExportOpt{
+		archive.WithPlatform(platforms.Ordered(platforms.DefaultSpec())),
+		archive.WithSkipNonDistributableBlobs(),
+	}
+	is := cs.client.ImageService()
+	for _, imageRef := range names {
+		named, err := reference.ParseDockerRef(imageRef)
+		if err != nil {
+			return err
+		}
+		opts = append(opts, archive.WithImage(is, named.String()))
+	}
+	return cs.client.Export(ctx, outStream, opts...)
 }
 
 func (cs *containerdStore) ImageDelete(ctx context.Context, imageRef string, force, prune bool) ([]types.ImageDeleteResponseItem, error) {
@@ -348,8 +361,11 @@ func (cs *containerdStore) ImportImage(ctx context.Context, src string, reposito
 	panic("not implemented")
 }
 
-func (cs *containerdStore) LoadImage(inTar io.ReadCloser, outStream io.Writer, quiet bool) error {
-	panic("not implemented")
+func (cs *containerdStore) LoadImage(ctx context.Context, inTar io.ReadCloser, outStream io.Writer, quiet bool) error {
+	_, err := cs.client.Import(ctx, inTar,
+		containerd.WithImportPlatform(platforms.DefaultStrict()),
+	)
+	return err
 }
 
 func (cs *containerdStore) LookupImage(ctx context.Context, name string) (*types.ImageInspect, error) {
