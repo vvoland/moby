@@ -81,5 +81,4 @@ set_platform_timeout() {
 	fi
 }
 
-sh /scripts/ensure-emptyfs.sh
 run_test_integration

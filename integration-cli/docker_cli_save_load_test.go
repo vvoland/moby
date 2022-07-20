@@ -130,7 +130,7 @@ func (s *DockerCLISaveLoadSuite) TestSaveCheckTimes(c *testing.T) {
 func (s *DockerCLISaveLoadSuite) TestSaveImageId(c *testing.T) {
 	testRequires(c, DaemonIsLinux)
 	repoName := "foobar-save-image-id-test"
-	dockerCmd(c, "tag", "emptyfs:latest", fmt.Sprintf("%v:latest", repoName))
+	dockerCmd(c, "tag", "busybox:latest", fmt.Sprintf("%v:latest", repoName))
 
 	out, _ := dockerCmd(c, "images", "-q", "--no-trunc", repoName)
 	cleanedLongImageID := strings.TrimPrefix(strings.TrimSpace(out), "sha256:")
@@ -202,10 +202,10 @@ func (s *DockerCLISaveLoadSuite) TestSaveMultipleNames(c *testing.T) {
 	repoName := "foobar-save-multi-name-test"
 
 	// Make one image
-	dockerCmd(c, "tag", "emptyfs:latest", fmt.Sprintf("%v-one:latest", repoName))
+	dockerCmd(c, "tag", "busybox:latest", fmt.Sprintf("%v-one:latest", repoName))
 
 	// Make two images
-	dockerCmd(c, "tag", "emptyfs:latest", fmt.Sprintf("%v-two:latest", repoName))
+	dockerCmd(c, "tag", "busybox:latest", fmt.Sprintf("%v-two:latest", repoName))
 
 	out, err := RunCommandPipelineWithOutput(
 		exec.Command(dockerBinary, "save", fmt.Sprintf("%v-one", repoName), fmt.Sprintf("%v-two:latest", repoName)),

@@ -59,7 +59,6 @@ ENTRYPOINT ["/scripts/run.sh"]
 # Add an unprivileged user to be used for tests which need it
 RUN addgroup docker && adduser -D -G docker unprivilegeduser -s /bin/ash
 
-# GNU tar is used for generating the emptyfs image
 RUN apk --no-cache add \
     bash \
     ca-certificates \
@@ -69,11 +68,9 @@ RUN apk --no-cache add \
     iptables \
     libcap2-bin \
     pigz \
-    tar \
     xz
 
 COPY hack/test/e2e-run.sh       /scripts/run.sh
-COPY hack/make/.ensure-emptyfs  /scripts/ensure-emptyfs.sh
 
 COPY integration/testdata       /tests/integration/testdata
 COPY integration/build/testdata /tests/integration/build/testdata

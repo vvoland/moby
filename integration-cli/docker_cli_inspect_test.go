@@ -33,20 +33,6 @@ func checkValidGraphDriver(c *testing.T, name string) {
 	}
 }
 
-func (s *DockerCLIInspectSuite) TestInspectImage(c *testing.T) {
-	testRequires(c, DaemonIsLinux)
-	imageTest := "emptyfs"
-	// It is important that this ID remain stable. If a code change causes
-	// it to be different, this is equivalent to a cache bust when pulling
-	// a legacy-format manifest. If the check at the end of this function
-	// fails, fix the difference in the image serialization instead of
-	// updating this hash.
-	imageTestID := "sha256:11f64303f0f7ffdc71f001788132bca5346831939a956e3e975c93267d89a16d"
-	id := inspectField(c, imageTest, "Id")
-
-	assert.Equal(c, id, imageTestID)
-}
-
 func (s *DockerCLIInspectSuite) TestInspectInt64(c *testing.T) {
 	dockerCmd(c, "run", "-d", "-m=300M", "--name", "inspectTest", "busybox", "true")
 	inspectOut := inspectField(c, "inspectTest", "HostConfig.Memory")
@@ -137,7 +123,7 @@ func (s *DockerCLIInspectSuite) TestInspectTypeFlagWithInvalidValue(c *testing.T
 
 func (s *DockerCLIInspectSuite) TestInspectImageFilterInt(c *testing.T) {
 	testRequires(c, DaemonIsLinux)
-	imageTest := "emptyfs"
+	imageTest := "busybox"
 	out := inspectField(c, imageTest, "Size")
 
 	size, err := strconv.Atoi(out)
@@ -175,7 +161,7 @@ func (s *DockerCLIInspectSuite) TestInspectContainerFilterInt(c *testing.T) {
 
 func (s *DockerCLIInspectSuite) TestInspectImageGraphDriver(c *testing.T) {
 	testRequires(c, DaemonIsLinux, Devicemapper)
-	imageTest := "emptyfs"
+	imageTest := "busybox"
 	name := inspectField(c, imageTest, "GraphDriver.Name")
 
 	checkValidGraphDriver(c, name)
