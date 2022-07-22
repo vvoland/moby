@@ -12,6 +12,12 @@ keywords: "API, Docker, rcli, REST, documentation"
      requests which include edits to this file in other repositories
      will be rejected.
 -->
+## v1.43 API changes
+
+[Docker Engine API v1.43](https://docs.docker.com/engine/api/v1.43/) documentation
+
+* `GET /info` now returns `Features` which is a list of daemon features enabled
+  in the config store.
 
 ## v1.42 API changes
 

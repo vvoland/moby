@@ -71,6 +71,7 @@ func (daemon *Daemon) SystemInfo() *types.Info {
 	daemon.fillSecurityOptions(v, sysInfo)
 	daemon.fillLicense(v)
 	daemon.fillDefaultAddressPools(v)
+	daemon.fillFeatures(v)
 
 	return v
 }
@@ -229,6 +230,14 @@ func (daemon *Daemon) fillDefaultAddressPools(v *types.Info) {
 			Base: pool.Base,
 			Size: pool.Size,
 		})
+	}
+}
+
+func (daemon *Daemon) fillFeatures(v *types.Info) {
+	for feature, enabled := range daemon.configStore.Features {
+		if enabled {
+			v.Features = append(v.Features, feature)
+		}
 	}
 }
 

@@ -314,6 +314,7 @@ type Info struct {
 	SecurityOptions     []string
 	ProductLicense      string               `json:",omitempty"`
 	DefaultAddressPools []NetworkAddressPool `json:",omitempty"`
+	Features            []string             `json:",omitempty"`
 
 	// Warnings contains a slice of warnings that occurred  while collecting
 	// system information. These warnings are intended to be informational
