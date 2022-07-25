@@ -226,3 +226,14 @@ func EnsureFrozenImagesLinux(testEnv *Execution) error {
 func (e *Execution) GitHubActions() bool {
 	return os.Getenv("GITHUB_ACTIONS") == "true"
 }
+
+// UsesSnapshotter is true if the daemon under test has the containerd snapshotter feature enabled
+func (e *Execution) UsesSnapshotter() bool {
+	for _, feature := range e.DaemonInfo.Features {
+		if feature == "containerd-snapshotter" {
+			return true
+		}
+	}
+
+	return false
+}
