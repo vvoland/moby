@@ -12,11 +12,11 @@ import (
 	"github.com/docker/docker/api/server/httputils"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
+	opts "github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/registry"
 	"github.com/docker/docker/api/types/versions"
 	"github.com/docker/docker/errdefs"
 	"github.com/docker/docker/image"
-	"github.com/docker/docker/layer"
 	"github.com/docker/docker/pkg/ioutils"
 	"github.com/docker/docker/pkg/streamformatter"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -193,7 +193,7 @@ func (s *imageRouter) deleteImages(ctx context.Context, w http.ResponseWriter, r
 }
 
 func (s *imageRouter) getImagesByName(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
-	image, err := s.backend.GetImage(ctx, vars["name"], nil)
+	image, err := s.backend.GetImage(ctx, vars["name"], opts.GetImageOpts{Details: true})
 	if err != nil {
 		return err
 	}
@@ -219,30 +219,9 @@ func (s *imageRouter) toImageInspect(img *image.Image) (*types.ImageInspect, err
 		}
 	}
 
-	var size int64
-	var layerMetadata map[string]string
-	layerID := img.RootFS.ChainID()
-	if layerID != "" {
-		l, err := s.layerStore.Get(layerID)
-		if err != nil {
-			return nil, err
-		}
-		defer layer.ReleaseAndLog(s.layerStore, l)
-		size = l.Size()
-		layerMetadata, err = l.Metadata()
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	comment := img.Comment
 	if len(comment) == 0 && len(img.History) > 0 {
 		comment = img.History[len(img.History)-1].Comment
-	}
-
-	lastUpdated, err := s.imageStore.GetLastUpdated(img.ID())
-	if err != nil {
-		return nil, err
 	}
 
 	return &types.ImageInspect{
@@ -261,15 +240,15 @@ func (s *imageRouter) toImageInspect(img *image.Image) (*types.ImageInspect, err
 		Variant:         img.Variant,
 		Os:              img.OperatingSystem(),
 		OsVersion:       img.OSVersion,
-		Size:            size,
-		VirtualSize:     size, // TODO: field unused, deprecate
+		Size:            img.Details.Size,
+		VirtualSize:     img.Details.Size, // TODO: field unused, deprecate
 		GraphDriver: types.GraphDriverData{
-			Name: s.layerStore.DriverName(),
-			Data: layerMetadata,
+			Name: img.Details.Driver,
+			Data: img.Details.Metadata,
 		},
 		RootFS: rootFSToAPIType(img.RootFS),
 		Metadata: types.ImageMetadata{
-			LastTagTime: lastUpdated,
+			LastTagTime: img.Details.LastUpdated,
 		},
 	}, nil
 }
@@ -324,7 +303,7 @@ func (s *imageRouter) getImagesJSON(ctx context.Context, w http.ResponseWriter, 
 
 func (s *imageRouter) getImagesHistory(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
 	name := vars["name"]
-	history, err := s.backend.ImageHistory(name)
+	history, err := s.backend.ImageHistory(ctx, name)
 	if err != nil {
 		return err
 	}

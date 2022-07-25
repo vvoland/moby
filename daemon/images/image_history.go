@@ -1,6 +1,7 @@
 package images // import "github.com/docker/docker/daemon/images"
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -11,9 +12,9 @@ import (
 
 // ImageHistory returns a slice of ImageHistory structures for the specified image
 // name by walking the image lineage.
-func (i *ImageService) ImageHistory(name string) ([]*image.HistoryResponseItem, error) {
+func (i *ImageService) ImageHistory(ctx context.Context, name string) ([]*image.HistoryResponseItem, error) {
 	start := time.Now()
-	img, err := i.GetImage(nil, name, nil)
+	img, err := i.GetImage(ctx, name, image.GetImageOpts{})
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +70,7 @@ func (i *ImageService) ImageHistory(name string) ([]*image.HistoryResponseItem, 
 		if id == "" {
 			break
 		}
-		histImg, err = i.GetImage(nil, id.String(), nil)
+		histImg, err = i.GetImage(ctx, id.String(), image.GetImageOpts{})
 		if err != nil {
 			break
 		}

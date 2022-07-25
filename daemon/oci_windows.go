@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	containertypes "github.com/docker/docker/api/types/container"
+	imagetypes "github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/container"
 	"github.com/docker/docker/errdefs"
 	"github.com/docker/docker/oci"
@@ -27,7 +28,7 @@ const (
 
 func (daemon *Daemon) createSpec(ctx context.Context, c *container.Container) (*specs.Spec, error) {
 
-	img, err := daemon.imageService.GetImage(ctx, string(c.ImageID), nil)
+	img, err := daemon.imageService.GetImage(ctx, string(c.ImageID), imagetypes.GetImageOpts{})
 	if err != nil {
 		return nil, err
 	}

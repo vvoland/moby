@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sort"
 
+	imagetypes "github.com/docker/docker/api/types/image"
+
 	"github.com/docker/distribution/reference"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/container"
@@ -30,7 +32,7 @@ func (r byCreated) Swap(i, j int)      { r[i], r[j] = r[j], r[i] }
 func (r byCreated) Less(i, j int) bool { return r[i].Created < r[j].Created }
 
 // Images returns a filtered list of images.
-func (i *ImageService) Images(_ context.Context, opts types.ImageListOptions) ([]*types.ImageSummary, error) {
+func (i *ImageService) Images(ctx context.Context, opts types.ImageListOptions) ([]*types.ImageSummary, error) {
 	if err := opts.Filters.Validate(acceptedImageFilterTags); err != nil {
 		return nil, err
 	}
@@ -49,7 +51,7 @@ func (i *ImageService) Images(_ context.Context, opts types.ImageListOptions) ([
 		err                       error
 	)
 	err = opts.Filters.WalkValues("before", func(value string) error {
-		beforeFilter, err = i.GetImage(nil, value, nil)
+		beforeFilter, err = i.GetImage(ctx, value, imagetypes.GetImageOpts{})
 		return err
 	})
 	if err != nil {
@@ -57,7 +59,7 @@ func (i *ImageService) Images(_ context.Context, opts types.ImageListOptions) ([
 	}
 
 	err = opts.Filters.WalkValues("since", func(value string) error {
-		sinceFilter, err = i.GetImage(nil, value, nil)
+		sinceFilter, err = i.GetImage(ctx, value, imagetypes.GetImageOpts{})
 		return err
 	})
 	if err != nil {
