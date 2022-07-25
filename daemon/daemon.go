@@ -1262,6 +1262,9 @@ func (daemon *Daemon) Shutdown(ctx context.Context) error {
 // Mount sets container.BaseFS
 // (is it not set coming in? why is it unset?)
 func (daemon *Daemon) Mount(container *container.Container) error {
+	if daemon.UsesSnapshotter() {
+		return nil
+	}
 	if container.RWLayer == nil {
 		return errors.New("RWLayer of container " + container.ID + " is unexpectedly nil")
 	}
@@ -1287,6 +1290,9 @@ func (daemon *Daemon) Mount(container *container.Container) error {
 
 // Unmount unsets the container base filesystem
 func (daemon *Daemon) Unmount(container *container.Container) error {
+	if daemon.UsesSnapshotter() {
+		return nil
+	}
 	if container.RWLayer == nil {
 		return errors.New("RWLayer of container " + container.ID + " is unexpectedly nil")
 	}

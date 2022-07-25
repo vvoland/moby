@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/containerd/containerd"
 	"github.com/docker/docker/api/types"
 	containertypes "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/container"
@@ -176,7 +177,13 @@ func (daemon *Daemon) containerStart(ctx context.Context, container *container.C
 		return err
 	}
 
-	err = daemon.containerd.Create(ctx, container.ID, spec, shim, createOptions)
+	newContainerOpts := []containerd.NewContainerOpts{}
+	if daemon.UsesSnapshotter() {
+		newContainerOpts = append(newContainerOpts, containerd.WithSnapshotter(containerd.DefaultSnapshotter))
+		newContainerOpts = append(newContainerOpts, containerd.WithSnapshot(container.ID))
+	}
+
+	err = daemon.containerd.Create(ctx, container.ID, spec, shim, createOptions, newContainerOpts...)
 	if err != nil {
 		if errdefs.IsConflict(err) {
 			logrus.WithError(err).WithField("container", container.ID).Error("Container not cleaned up from containerd from previous run")
