@@ -52,7 +52,7 @@ type ImageServiceConfig struct {
 
 // NewImageService returns a new ImageService from a configuration
 func NewImageService(config ImageServiceConfig) *ImageService {
-	return &ImageService{
+	i := &ImageService{
 		containers:                config.ContainerStore,
 		distributionMetadataStore: config.DistributionMetadataStore,
 		downloadManager:           xfer.NewLayerDownloadManager(config.LayerStore, config.MaxConcurrentDownloads, xfer.WithMaxDownloadAttempts(config.MaxDownloadAttempts)),
@@ -67,6 +67,11 @@ func NewImageService(config ImageServiceConfig) *ImageService {
 		content:                   config.ContentStore,
 		contentNamespace:          config.ContentNamespace,
 	}
+	i.eventsLogger = image.EventLogger{
+		Events:   i.eventsService,
+		GetImage: i.GetImage,
+	}
+	return i
 }
 
 // ImageService provides a backend for image management
@@ -86,6 +91,7 @@ type ImageService struct {
 	content                   content.Store
 	contentNamespace          string
 	usage                     singleflight.Group
+	eventsLogger              image.EventLogger
 }
 
 // DistributionServices provides daemon image storage services
