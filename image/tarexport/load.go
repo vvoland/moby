@@ -134,7 +134,7 @@ func (l *tarexporter) Load(inTar io.ReadCloser, outStream io.Writer, quiet bool)
 		}
 
 		parentLinks = append(parentLinks, parentLink{imgID, m.Parent})
-		l.loggerImgEvent.LogImageEvent(imgID.String(), imgID.String(), "load")
+		l.loggerImgEvent(imgID.String(), imgID.String(), "load")
 	}
 
 	for _, p := range validatedParentLinks(parentLinks) {

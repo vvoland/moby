@@ -1,18 +1,22 @@
-package images // import "github.com/docker/docker/daemon/images"
+package image
 
 import (
+	"context"
+
 	"github.com/docker/docker/api/types/events"
 	imagetypes "github.com/docker/docker/api/types/image"
+	daemonevents "github.com/docker/docker/daemon/events"
 )
 
-// LogImageEvent generates an event related to an image with only the default attributes.
-func (i *ImageService) LogImageEvent(imageID, refName, action string) {
-	i.LogImageEventWithAttributes(imageID, refName, action, map[string]string{})
+// EventLogger produces daemon events for image lifecycle
+type EventLogger struct {
+	Events   *daemonevents.Events
+	GetImage func(ctx context.Context, refOrID string, options imagetypes.GetImageOpts) (*Image, error)
 }
 
-// LogImageEventWithAttributes generates an event related to an image with specific given attributes.
-func (i *ImageService) LogImageEventWithAttributes(imageID, refName, action string, attributes map[string]string) {
-	img, err := i.GetImage(nil, imageID, imagetypes.GetImageOpts{})
+func (e EventLogger) LogImageEvent(imageID, refName, action string) {
+	attributes := map[string]string{}
+	img, err := e.GetImage(nil, imageID, imagetypes.GetImageOpts{})
 	if err == nil && img.Config != nil {
 		// image has not been removed yet.
 		// it could be missing if the event is `delete`.
@@ -26,7 +30,7 @@ func (i *ImageService) LogImageEventWithAttributes(imageID, refName, action stri
 		Attributes: attributes,
 	}
 
-	i.eventsService.Log(action, events.ImageEventType, actor)
+	e.Events.Log(action, events.ImageEventType, actor)
 }
 
 // copyAttributes guarantees that labels are not mutated by event triggers.
