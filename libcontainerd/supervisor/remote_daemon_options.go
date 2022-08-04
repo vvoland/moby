@@ -1,5 +1,7 @@
 package supervisor // import "github.com/docker/docker/libcontainerd/supervisor"
 
+import "github.com/containerd/containerd/services/server/config"
+
 // WithRemoteAddr sets the external containerd socket to connect to.
 func WithRemoteAddr(addr string) DaemonOpt {
 	return func(r *remote) error {
@@ -50,6 +52,16 @@ func WithMetricsAddress(addr string) DaemonOpt {
 func WithPlugin(name string, conf interface{}) DaemonOpt {
 	return func(r *remote) error {
 		r.Plugins[name] = conf
+		return nil
+	}
+}
+
+// WithProxyPlugin allow configuring a containerd proxy plugin
+// configuration values passed needs to be quoted if quotes are needed in
+// the toml format.
+func WithProxyPlugin(name string, plugin config.ProxyPlugin) DaemonOpt {
+	return func(r *remote) error {
+		r.ProxyPlugins[name] = plugin
 		return nil
 	}
 }

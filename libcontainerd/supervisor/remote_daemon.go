@@ -62,9 +62,10 @@ func Start(ctx context.Context, rootDir, stateDir string, opts ...DaemonOpt) (Da
 		rootDir:  rootDir,
 		stateDir: stateDir,
 		Config: config.Config{
-			Version: 2,
-			Root:    filepath.Join(rootDir, "daemon"),
-			State:   filepath.Join(stateDir, "daemon"),
+			Version:      2,
+			Root:         filepath.Join(rootDir, "daemon"),
+			State:        filepath.Join(stateDir, "daemon"),
+			ProxyPlugins: map[string]config.ProxyPlugin{},
 		},
 		Plugins:       make(map[string]interface{}),
 		daemonPid:     -1,

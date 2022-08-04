@@ -13,6 +13,7 @@ import (
 	"time"
 
 	containerddefaults "github.com/containerd/containerd/defaults"
+	containerdconfig "github.com/containerd/containerd/services/server/config"
 	"github.com/docker/docker/api"
 	apiserver "github.com/docker/docker/api/server"
 	buildbackend "github.com/docker/docker/api/server/backend/build"
@@ -595,6 +596,19 @@ func (cli *DaemonCli) getContainerdDaemonOpts() ([]supervisor.DaemonOpt, error) 
 		opts = append(opts, supervisor.WithLogLevel("debug"))
 	} else if cli.Config.LogLevel != "" {
 		opts = append(opts, supervisor.WithLogLevel(cli.Config.LogLevel))
+	}
+
+	switch cli.Config.ContainerdSnapshotter {
+	case "stargz":
+		opts = append(opts, supervisor.WithProxyPlugin("stargz", containerdconfig.ProxyPlugin{
+			Type:    "snapshot",
+			Address: "/run/containerd-stargz-grpc/containerd-stargz-grpc.sock", // TODO(vvoland): make configurable
+		}))
+	case "nydus":
+		opts = append(opts, supervisor.WithProxyPlugin("nydus", containerdconfig.ProxyPlugin{
+			Type:    "snapshot",
+			Address: "/run/containerd-nydus/containerd-nydus-grpc.sock", // TODO(vvoland): make configurable
+		}))
 	}
 
 	if !cli.Config.CriContainerd {
