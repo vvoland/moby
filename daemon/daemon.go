@@ -1027,7 +1027,7 @@ func NewDaemon(ctx context.Context, config *config.Config, pluginStore *plugin.S
 	d.linkIndex = newLinkIndex()
 
 	if d.UsesSnapshotter() {
-		d.imageService = ctrd.NewService(d.containerdCli)
+		d.imageService = ctrd.NewService(d.containerdCli, d.containers)
 	} else {
 		ifs, err := image.NewFSStoreBackend(filepath.Join(imageRoot, "imagedb"))
 		if err != nil {
