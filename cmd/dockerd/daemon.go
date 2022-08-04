@@ -38,6 +38,7 @@ import (
 	"github.com/docker/docker/daemon"
 	"github.com/docker/docker/daemon/cluster"
 	"github.com/docker/docker/daemon/config"
+	"github.com/docker/docker/daemon/containerd"
 	"github.com/docker/docker/daemon/listeners"
 	"github.com/docker/docker/dockerversion"
 	"github.com/docker/docker/libcontainerd/supervisor"
@@ -45,6 +46,7 @@ import (
 	"github.com/docker/docker/pkg/authorization"
 	"github.com/docker/docker/pkg/homedir"
 	"github.com/docker/docker/pkg/jsonmessage"
+	"github.com/docker/docker/pkg/parsers"
 	"github.com/docker/docker/pkg/pidfile"
 	"github.com/docker/docker/pkg/plugingetter"
 	"github.com/docker/docker/pkg/sysinfo"
@@ -598,17 +600,44 @@ func (cli *DaemonCli) getContainerdDaemonOpts() ([]supervisor.DaemonOpt, error) 
 		opts = append(opts, supervisor.WithLogLevel(cli.Config.LogLevel))
 	}
 
-	switch cli.Config.ContainerdSnapshotter {
-	case "stargz":
-		opts = append(opts, supervisor.WithProxyPlugin("stargz", containerdconfig.ProxyPlugin{
-			Type:    "snapshot",
-			Address: "/run/containerd-stargz-grpc/containerd-stargz-grpc.sock", // TODO(vvoland): make configurable
-		}))
-	case "nydus":
-		opts = append(opts, supervisor.WithProxyPlugin("nydus", containerdconfig.ProxyPlugin{
-			Type:    "snapshot",
-			Address: "/run/containerd-nydus/containerd-nydus-grpc.sock", // TODO(vvoland): make configurable
-		}))
+	snapshotterName := containerd.SnapshotterFromGraphDriver(cli.Config.GraphDriver)
+
+	// Default platform snapshotters don't need any extra options
+	switch snapshotterName {
+	case "overlayfs", "native", "windows":
+		snapshotterName = ""
+	}
+
+	if snapshotterName != "" {
+		snapshotterAddr := ""
+		for _, o := range cli.Config.GraphOptions {
+			key, val, err := parsers.ParseKeyValueOpt(o)
+			if err != nil {
+				return nil, err
+			}
+			if key == "address" {
+				snapshotterAddr = val
+				break
+			}
+		}
+
+		if snapshotterAddr == "" {
+			switch snapshotterName {
+			case "stargz":
+				snapshotterAddr = "/run/containerd-stargz-grpc/containerd-stargz-grpc.sock"
+			case "nydus":
+				snapshotterAddr = "/run/containerd-nydus/containerd-nydus-grpc.sock"
+			default:
+				return nil, fmt.Errorf("unknown snapshotter: %s, don't know the default address", snapshotterName)
+			}
+		}
+
+		if snapshotterAddr != "" {
+			opts = append(opts, supervisor.WithProxyPlugin(snapshotterName, containerdconfig.ProxyPlugin{
+				Type:    "snapshot",
+				Address: snapshotterAddr,
+			}))
+		}
 	}
 
 	if !cli.Config.CriContainerd {
