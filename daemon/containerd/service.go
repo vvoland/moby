@@ -19,14 +19,16 @@ import (
 
 // ImageService implements daemon.ImageService
 type ImageService struct {
-	client *containerd.Client
-	usage  singleflight.Group
+	client     *containerd.Client
+	usage      singleflight.Group
+	containers container.Store
 }
 
 // NewService creates a new ImageService.
-func NewService(c *containerd.Client) *ImageService {
+func NewService(c *containerd.Client, containers container.Store) *ImageService {
 	return &ImageService{
-		client: c,
+		client:     c,
+		containers: containers,
 	}
 }
 
