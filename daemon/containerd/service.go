@@ -66,12 +66,6 @@ func (i *ImageService) CreateLayer(container *container.Container, initFunc laye
 	return nil, errors.New("not implemented")
 }
 
-// GetLayerByID returns a layer by ID
-// called from daemon.go Daemon.restore(), and Daemon.containerExport().
-func (i *ImageService) GetLayerByID(cid string) (layer.RWLayer, error) {
-	return nil, errors.New("not implemented")
-}
-
 // LayerStoreStatus returns the status for each layer store
 // called from info.go
 func (i *ImageService) LayerStoreStatus() [][2]string {
