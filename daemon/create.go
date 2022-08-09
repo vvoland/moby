@@ -190,7 +190,7 @@ func (daemon *Daemon) create(ctx context.Context, opts createOpts) (retC *contai
 			return nil, err
 		}
 		parent := identity.ChainID(diffIDs).String()
-		s := daemon.containerdCli.SnapshotService(daemon.graphDriver)
+		s := daemon.containerdCli.SnapshotService(daemon.ImageService().StorageDriver())
 		if _, err := s.Prepare(ctx, ctr.ID, parent); err != nil {
 			return nil, err
 		}
@@ -202,7 +202,7 @@ func (daemon *Daemon) create(ctx context.Context, opts createOpts) (retC *contai
 		}
 		ls.AddResource(ctx, lease, leases.Resource{
 			ID:   ctr.ID,
-			Type: "snapshots/" + daemon.graphDriver,
+			Type: "snapshots/" + daemon.imageService.StorageDriver(),
 		})
 	} else {
 		// Set RWLayer for container after mount labels have been set
