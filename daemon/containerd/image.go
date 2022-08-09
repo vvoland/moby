@@ -60,7 +60,7 @@ func (i *ImageService) GetImage(ctx context.Context, refOrID string, options ima
 			References:  tags,
 			Size:        size,
 			Metadata:    nil,
-			Driver:      i.GraphDriverName(),
+			Driver:      i.StorageDriver(),
 			LastUpdated: ii.Metadata().UpdatedAt,
 		}
 	}
