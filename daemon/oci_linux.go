@@ -1064,9 +1064,8 @@ func (daemon *Daemon) createSpec(ctx context.Context, c *container.Container) (r
 	snapshotter := ""
 	snapshotKey := ""
 	if daemon.UsesSnapshotter() {
-		snapshotter = daemon.graphDriver
+		snapshotter = daemon.ImageService().StorageDriver()
 		snapshotKey = c.ID
-
 	}
 
 	return &s, coci.ApplyOpts(context.Background(), daemon.containerdCli, &containers.Container{
