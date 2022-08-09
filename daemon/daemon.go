@@ -1007,19 +1007,21 @@ func NewDaemon(ctx context.Context, config *config.Config, pluginStore *plugin.S
 		}
 
 		// As layerstore initialization may set the driver
-		d.graphDriver = layerStore.DriverName()
+		graphDriver = layerStore.DriverName()
 
 		// Configure and validate the kernels security support. Note this is a Linux/FreeBSD
 		// operation only, so it is safe to pass *just* the runtime OS graphdriver.
-		if err := configureKernelSecuritySupport(config, d.graphDriver); err != nil {
+		if err := configureKernelSecuritySupport(config, graphDriver); err != nil {
 			return nil, err
 		}
 
-		imageRoot := filepath.Join(config.Root, "image", d.graphDriver)
+		imageRoot := filepath.Join(config.Root, "image", graphDriver)
 		ifs, err := image.NewFSStoreBackend(filepath.Join(imageRoot, "imagedb"))
 		if err != nil {
 			return nil, err
 		}
+
+		d.graphDriver = graphDriver
 
 		// We have a single tag/reference store for the daemon globally. However, it's
 		// stored under the graphdriver. On host platforms which only support a single
