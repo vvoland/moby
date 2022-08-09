@@ -20,16 +20,18 @@ import (
 
 // ImageService implements daemon.ImageService
 type ImageService struct {
-	client     *containerd.Client
-	usage      singleflight.Group
-	containers container.Store
+	client      *containerd.Client
+	usage       singleflight.Group
+	containers  container.Store
+	snapshotter string
 }
 
 // NewService creates a new ImageService.
-func NewService(c *containerd.Client, containers container.Store) *ImageService {
+func NewService(c *containerd.Client, containers container.Store, snapshotter string) *ImageService {
 	return &ImageService{
-		client:     c,
-		containers: containers,
+		client:      c,
+		containers:  containers,
+		snapshotter: snapshotter,
 	}
 }
 
@@ -93,7 +95,7 @@ func (i *ImageService) Cleanup() error {
 // - newContainer
 // - to report an error in Daemon.Mount(container)
 func (i *ImageService) GraphDriverName() string {
-	return "containerd-snapshotter"
+	return i.snapshotter
 }
 
 // ReleaseLayer releases a layer allowing it to be removed
@@ -107,7 +109,7 @@ func (i *ImageService) ReleaseLayer(rwlayer layer.RWLayer) error {
 func (i *ImageService) LayerDiskUsage(ctx context.Context) (int64, error) {
 	ch := i.usage.DoChan("LayerDiskUsage", func() (interface{}, error) {
 		var allLayersSize int64
-		snapshotter := i.client.SnapshotService(containerd.DefaultSnapshotter)
+		snapshotter := i.client.SnapshotService(i.snapshotter)
 		snapshotter.Walk(ctx, func(ctx context.Context, info snapshots.Info) error {
 			usage, err := snapshotter.Usage(ctx, info.Name)
 			if err != nil {
@@ -168,7 +170,7 @@ func (i *ImageService) GetLayerFolders(img *image.Image, rwLayer layer.RWLayer) 
 
 // GetContainerLayerSize returns the real size & virtual size of the container.
 func (i *ImageService) GetContainerLayerSize(ctx context.Context, containerID string) (int64, int64, error) {
-	snapshotter := i.client.SnapshotService(containerd.DefaultSnapshotter)
+	snapshotter := i.client.SnapshotService(i.snapshotter)
 	sizeCache := make(map[digest.Digest]int64)
 	snapshotSizeFn := func(d digest.Digest) (int64, error) {
 		if s, ok := sizeCache[d]; ok {
