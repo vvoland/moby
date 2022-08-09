@@ -10,6 +10,7 @@ import (
 
 	"github.com/containerd/containerd"
 	containerdimages "github.com/containerd/containerd/images"
+	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/platforms"
 	"github.com/docker/docker/api/types"
 	containertypes "github.com/docker/docker/api/types/container"
@@ -189,8 +190,16 @@ func (daemon *Daemon) create(ctx context.Context, opts createOpts) (retC *contai
 			return nil, err
 		}
 		parent := identity.ChainID(diffIDs).String()
+
+		lctx, releaseRelease, err := daemon.containerdCli.WithLease(ctx, leases.WithID("ctr"+ctr.ID))
+		_ = releaseRelease // We don't release it here because we keep the lease until container is deleted
+
+		if err != nil {
+			return nil, err
+		}
+
 		s := daemon.containerdCli.SnapshotService(daemon.graphDriver)
-		if _, err := s.Prepare(ctx, ctr.ID, parent); err != nil {
+		if _, err := s.Prepare(lctx, ctr.ID, parent); err != nil {
 			return nil, err
 		}
 	} else {

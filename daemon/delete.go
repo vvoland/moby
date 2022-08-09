@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/containerd/containerd/leases"
 	"github.com/docker/docker/api/types"
 	containertypes "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/container"
@@ -136,6 +137,15 @@ func (daemon *Daemon) cleanupContainer(container *container.Container, config ty
 			return err
 		}
 		container.RWLayer = nil
+	} else {
+		lease := leases.Lease{
+			ID: "ctr" + container.ID,
+		}
+		ls := daemon.containerdCli.LeasesService()
+		err := ls.Delete(context.Background(), lease, leases.SynchronousDelete)
+		if err != nil {
+			logrus.WithField("lease", lease).WithError(err).Warn("Failed to delete lease")
+		}
 	}
 
 	if err := containerfs.EnsureRemoveAll(container.Root); err != nil {
