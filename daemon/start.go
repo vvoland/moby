@@ -190,19 +190,37 @@ func (daemon *Daemon) containerStart(ctx context.Context, container *container.C
 		newContainerOpts = append(newContainerOpts, containerd.WithImage(ctrdimg))
 	}
 
-	err = daemon.containerd.Create(ctx, container.ID, spec, shim, createOptions, newContainerOpts...)
-	if err != nil {
-		if errdefs.IsConflict(err) {
-			logrus.WithError(err).WithField("container", container.ID).Error("Container not cleaned up from containerd from previous run")
-			// best effort to clean up old container object
-			daemon.containerd.DeleteTask(context.Background(), container.ID)
-			if err := daemon.containerd.Delete(context.Background(), container.ID); err != nil && !errdefs.IsNotFound(err) {
-				logrus.WithError(err).WithField("container", container.ID).Error("Error cleaning up stale containerd container object")
-			}
-			err = daemon.containerd.Create(ctx, container.ID, spec, shim, createOptions)
+	createContainer := true
+	if daemon.UsesSnapshotter() {
+		// When using the containerd snapshotters we want to reuse the existing containerd container
+		_, err := daemon.containerdCli.LoadContainer(ctx, container.ID)
+		if err == nil {
+			createContainer = false
 		}
+	}
+
+	if createContainer {
+		err = daemon.containerd.Create(ctx, container.ID, spec, shim, createOptions, newContainerOpts...)
 		if err != nil {
-			return translateContainerdStartErr(container.Path, container.SetExitCode, err)
+			if errdefs.IsConflict(err) {
+				// If we are here and we are using the contaienrd snapshotters then it means
+				// someone created a container with the same ID as ours and the creation was
+				// interleaved between the check that the container exists and our creation.
+				// We can't continue in this case so return the error.
+				if daemon.UsesSnapshotter() {
+					return err
+				}
+				logrus.WithError(err).WithField("container", container.ID).Error("Container not cleaned up from containerd from previous run")
+				// best effort to clean up old container object
+				daemon.containerd.DeleteTask(context.Background(), container.ID)
+				if err := daemon.containerd.Delete(context.Background(), container.ID); err != nil && !errdefs.IsNotFound(err) {
+					logrus.WithError(err).WithField("container", container.ID).Error("Error cleaning up stale containerd container object")
+				}
+				err = daemon.containerd.Create(ctx, container.ID, spec, shim, createOptions)
+			}
+			if err != nil {
+				return translateContainerdStartErr(container.Path, container.SetExitCode, err)
+			}
 		}
 	}
 
@@ -273,7 +291,9 @@ func (daemon *Daemon) Cleanup(container *container.Container) {
 
 	container.CancelAttachContext()
 
-	if err := daemon.containerd.Delete(context.Background(), container.ID); err != nil {
-		logrus.Errorf("%s cleanup: failed to delete container from containerd: %v", container.ID, err)
+	if !daemon.UsesSnapshotter() {
+		if err := daemon.containerd.Delete(context.Background(), container.ID); err != nil {
+			logrus.Errorf("%s cleanup: failed to delete container from containerd: %v", container.ID, err)
+		}
 	}
 }
