@@ -207,10 +207,9 @@ func (s *imageRouter) getImagesByName(ctx context.Context, w http.ResponseWriter
 }
 
 func (s *imageRouter) toImageInspect(img *image.Image) (*types.ImageInspect, error) {
-	refs := s.referenceBackend.References(img.ID().Digest())
 	repoTags := []string{}
 	repoDigests := []string{}
-	for _, ref := range refs {
+	for _, ref := range img.Details.References {
 		switch ref.(type) {
 		case reference.NamedTagged:
 			repoTags = append(repoTags, reference.FamiliarString(ref))
