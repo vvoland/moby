@@ -2,6 +2,7 @@ package containerd
 
 import (
 	"context"
+	"errors"
 	"io"
 
 	"github.com/containerd/containerd"
@@ -80,7 +81,7 @@ func (i *ImageService) PullImage(ctx context.Context, image, tagOrDigest string,
 
 // GetRepository returns a repository from the registry.
 func (i *ImageService) GetRepository(ctx context.Context, ref reference.Named, authConfig *registry.AuthConfig) (distribution.Repository, error) {
-	panic("not implemented")
+	return nil, errors.New("not implemented")
 }
 
 func (i *ImageService) applySnapshotterOpts(opts []containerd.RemoteOpt, ref reference.Named) []containerd.RemoteOpt {

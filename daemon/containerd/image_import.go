@@ -2,6 +2,7 @@ package containerd
 
 import (
 	"context"
+	"errors"
 	"io"
 
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -12,5 +13,5 @@ import (
 // written to outStream. Repository and tag names can optionally be given in
 // the repo and tag arguments, respectively.
 func (i *ImageService) ImportImage(ctx context.Context, src string, repository string, platform *specs.Platform, tag string, msg string, inConfig io.ReadCloser, outStream io.Writer, changes []string) error {
-	panic("not implemented")
+	return errors.New("not implemented")
 }
