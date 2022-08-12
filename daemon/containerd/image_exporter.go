@@ -9,12 +9,26 @@ import (
 	containerdimages "github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/images/archive"
 	"github.com/containerd/containerd/images/converter"
+	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/platforms"
 	"github.com/docker/distribution/reference"
-	"github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/docker/docker/container"
+	"github.com/docker/docker/pkg/containerfs"
+	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
+
+func (i *ImageService) PerformWithBaseFS(ctx context.Context, c *container.Container, fn func(containerfs.ContainerFS) error) error {
+	snapshotter := i.client.SnapshotService(containerd.DefaultSnapshotter)
+	mounts, err := snapshotter.Mounts(ctx, c.ID)
+	if err != nil {
+		return err
+	}
+	return mount.WithTempMount(ctx, mounts, func(root string) error {
+		return fn(containerfs.NewLocalContainerFS(root))
+	})
+}
 
 // LoadImage uploads a set of images into the repository. This is the
 // complement of ExportImage.  The input stream is an uncompressed tar

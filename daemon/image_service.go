@@ -16,6 +16,7 @@ import (
 	"github.com/docker/docker/daemon/images"
 	"github.com/docker/docker/image"
 	"github.com/docker/docker/layer"
+	"github.com/docker/docker/pkg/containerfs"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
@@ -30,6 +31,7 @@ type ImageService interface {
 	CreateImage(config []byte, parent string) (builder.Image, error)
 	ImageDelete(ctx context.Context, imageRef string, force, prune bool) ([]types.ImageDeleteResponseItem, error)
 	ExportImage(ctx context.Context, names []string, outStream io.Writer) error
+	PerformWithBaseFS(ctx context.Context, c *container.Container, fn func(containerfs.ContainerFS) error) error
 	LoadImage(ctx context.Context, inTar io.ReadCloser, outStream io.Writer, quiet bool) error
 	Images(ctx context.Context, opts types.ImageListOptions) ([]*types.ImageSummary, error)
 	CountImages() int
@@ -47,7 +49,6 @@ type ImageService interface {
 
 	GetImageAndReleasableLayer(ctx context.Context, refOrID string, opts backend.GetImageAndLayerOptions) (builder.Image, builder.ROLayer, error)
 	CreateLayer(container *container.Container, initFunc layer.MountInit) (layer.RWLayer, error)
-	GetLayerByID(cid string) (layer.RWLayer, error)
 	LayerStoreStatus() [][2]string
 	GetLayerMountID(cid string) (string, error)
 	ReleaseLayer(rwlayer layer.RWLayer) error
