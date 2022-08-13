@@ -91,6 +91,12 @@ func newSnapshotterController(rt http.RoundTripper, opt Opt) (*mobycontrol.Contr
 	wo.GCPolicy = policy
 	wo.RegistryHosts = opt.RegistryHosts
 
+	exec, err := newExecutor(opt.Root, opt.DefaultCgroupParent, opt.NetworkController, dns, opt.Rootless, opt.IdentityMapping, opt.ApparmorProfile)
+	if err != nil {
+		return nil, err
+	}
+	wo.Executor = exec
+
 	w, err := mobyworker.NewContainerdWorker(context.TODO(), wo)
 	if err != nil {
 		return nil, err
