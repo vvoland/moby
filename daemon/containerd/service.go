@@ -22,10 +22,11 @@ import (
 
 // ImageService implements daemon.ImageService
 type ImageService struct {
-	client      *containerd.Client
-	snapshotter string
-	usage       singleflight.Group
-	containers  container.Store
+	client       *containerd.Client
+	snapshotter  string
+	usage        singleflight.Group
+	containers   container.Store
+	pruneRunning int32
 }
 
 // NewService creates a new ImageService.
