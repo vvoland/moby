@@ -20,7 +20,7 @@ import (
 )
 
 func (i *ImageService) PerformWithBaseFS(ctx context.Context, c *container.Container, fn func(containerfs.ContainerFS) error) error {
-	snapshotter := i.client.SnapshotService(containerd.DefaultSnapshotter)
+	snapshotter := i.client.SnapshotService(i.snapshotter)
 	mounts, err := snapshotter.Mounts(ctx, c.ID)
 	if err != nil {
 		return err
