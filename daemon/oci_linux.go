@@ -1069,7 +1069,7 @@ func (daemon *Daemon) createSpec(ctx context.Context, c *container.Container) (r
 
 	}
 
-	return &s, coci.ApplyOpts(context.Background(), nil, &containers.Container{
+	return &s, coci.ApplyOpts(context.Background(), daemon.containerdCli, &containers.Container{
 		ID:          c.ID,
 		Snapshotter: snapshotter,
 		SnapshotKey: snapshotKey,
