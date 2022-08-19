@@ -1066,7 +1066,7 @@ func (daemon *Daemon) createSpec(ctx context.Context, c *container.Container) (r
 		snapshotKey = c.ID
 	}
 
-	return &s, coci.ApplyOpts(ctx, nil, &containers.Container{
+	return &s, coci.ApplyOpts(ctx, daemon.containerdCli, &containers.Container{
 		ID:          c.ID,
 		Snapshotter: snapshotter,
 		SnapshotKey: snapshotKey,
