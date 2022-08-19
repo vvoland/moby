@@ -180,7 +180,7 @@ func (daemon *Daemon) containerStart(ctx context.Context, container *container.C
 
 	newContainerOpts := []containerd.NewContainerOpts{}
 	if daemon.UsesSnapshotter() {
-		newContainerOpts = append(newContainerOpts, containerd.WithSnapshotter(daemon.ImageService().StorageDriver()))
+		newContainerOpts = append(newContainerOpts, containerd.WithSnapshotter(container.Driver))
 		newContainerOpts = append(newContainerOpts, containerd.WithSnapshot(container.ID))
 		c8dImge, err := daemon.imageService.(containerdImage).GetContainerdImage(ctx, container.Config.Image, &v1.Platform{})
 		if err != nil {
