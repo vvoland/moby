@@ -2,9 +2,15 @@ package containerd
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"strings"
+	"sync"
 
 	"github.com/containerd/containerd"
+	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/errdefs"
+	"github.com/containerd/containerd/images"
 	containerdimages "github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/images/converter"
 	"github.com/containerd/containerd/platforms"
@@ -14,12 +20,13 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/sync/semaphore"
 )
 
 // PushImage initiates a push operation on the repository named localName.
 func (i *ImageService) PushImage(ctx context.Context, image, tag string, metaHeaders map[string][]string, authConfig *registry.AuthConfig, outStream io.Writer) error {
 	// TODO: Pass this from user?
-	platformMatcher := platforms.DefaultStrict()
+	platformMatcher := platforms.All
 
 	ref, err := reference.ParseNormalizedNamed(image)
 	if err != nil {
@@ -62,15 +69,16 @@ func (i *ImageService) PushImage(ctx context.Context, image, tag string, metaHea
 		logrus.WithField("desc", desc).Debug("Pushing")
 		if desc.MediaType != containerdimages.MediaTypeDockerSchema1Manifest {
 			children, err := containerdimages.Children(ctx, store, desc)
-
-			if err == nil {
-				for _, c := range children {
-					jobs.Add(c)
-				}
+			if err != nil {
+				return nil, err
+			}
+			for _, c := range children {
+				jobs.Add(c)
 			}
 
 			jobs.Add(desc)
 		}
+
 		return nil, nil
 	})
 	imageHandler = remotes.SkipNonDistributableBlobs(imageHandler)
@@ -80,12 +88,155 @@ func (i *ImageService) PushImage(ctx context.Context, image, tag string, metaHea
 	finishProgress := showProgress(ctx, jobs, outStream, pushProgress(tracker))
 	defer finishProgress()
 
-	logrus.WithField("desc", target).WithField("ref", ref.String()).Info("Pushing desc to remote ref")
-	err = i.client.Push(ctx, ref.String(), target,
-		containerd.WithResolver(resolver),
-		containerd.WithPlatformMatcher(platformMatcher),
-		containerd.WithImageHandler(imageHandler),
-	)
+	sources, err := collectSources(ctx, target, store)
+	if err != nil {
+		return err
+	}
 
-	return err
+	return push(ctx, i.client, ref.String(), target, resolver, imageHandler, sources)
+}
+
+// Push uploads the provided content to a remote resource
+func push(ctx context.Context, c *containerd.Client, ref string, desc ocispec.Descriptor, resolver remotes.Resolver, imagesHandler containerdimages.HandlerFunc, sources map[string]distributionSource) error {
+	// Annotate ref with digest to push only push tag for single digest
+	if !strings.Contains(ref, "@") {
+		ref = ref + "@" + desc.Digest.String()
+	}
+
+	pusher, err := resolver.Pusher(ctx, ref)
+	if err != nil {
+		return err
+	}
+
+	wrapper := func(h images.Handler) images.Handler {
+		h = images.Handlers(imagesHandler, h)
+
+		return h
+	}
+
+	var limiter *semaphore.Weighted
+
+	logrus.WithField("desc", desc).WithField("ref", ref).Info("Pushing desc to remote ref")
+	return pushContent(ctx, pusher, desc, c.ContentStore(), limiter, platforms.All, wrapper, sources)
+}
+
+func pushContent(ctx context.Context, pusher remotes.Pusher, desc ocispec.Descriptor, store content.Store, limiter *semaphore.Weighted, platform platforms.MatchComparer, wrapper func(h images.Handler) images.Handler, sources map[string]distributionSource) error {
+	var m sync.Mutex
+	manifestStack := []ocispec.Descriptor{}
+
+	filterHandler := images.HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
+		switch desc.MediaType {
+		case images.MediaTypeDockerSchema2Manifest, ocispec.MediaTypeImageManifest,
+			images.MediaTypeDockerSchema2ManifestList, ocispec.MediaTypeImageIndex:
+			m.Lock()
+			manifestStack = append(manifestStack, desc)
+			m.Unlock()
+			return nil, images.ErrStopHandler
+		default:
+			return nil, nil
+		}
+	})
+
+	pushHandler := remotes.PushHandler(pusher, store)
+
+	platformFilterhandler := images.FilterPlatforms(images.ChildrenHandler(store), platform)
+
+	annotateHandler := annotateDistributionSourceHandler(platformFilterhandler, store, sources)
+
+	var handler images.Handler = images.Handlers(
+		annotateHandler,
+		filterHandler,
+		pushHandler,
+	)
+	if wrapper != nil {
+		handler = wrapper(handler)
+	}
+
+	if err := images.Dispatch(ctx, handler, limiter, desc); err != nil {
+		return err
+	}
+
+	// Iterate in reverse order as seen, parent always uploaded after child
+	for i := len(manifestStack) - 1; i >= 0; i-- {
+		_, err := pushHandler(ctx, manifestStack[i])
+		if err != nil {
+			// TODO(estesp): until we have a more complete method for index push, we need to report
+			// missing dependencies in an index/manifest list by sensing the "400 Bad Request"
+			// as a marker for this problem
+			if (manifestStack[i].MediaType == ocispec.MediaTypeImageIndex ||
+				manifestStack[i].MediaType == images.MediaTypeDockerSchema2ManifestList) &&
+				errors.Unwrap(err) != nil && strings.Contains(errors.Unwrap(err).Error(), "400 Bad Request") {
+				return fmt.Errorf("manifest list/index references to blobs and/or manifests are missing in your target registry: %w", err)
+			}
+			return err
+		}
+	}
+
+	return nil
+}
+
+// annotateDistributionSourceHandler add distribution source label into
+// annotation of config or blob descriptor.
+func annotateDistributionSourceHandler(f images.HandlerFunc, manager content.Manager, sources map[string]distributionSource) images.HandlerFunc {
+	return func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
+		children, err := f(ctx, desc)
+		if err != nil {
+			return nil, err
+		}
+
+		// only add distribution source for the config or blob data descriptor
+		switch desc.MediaType {
+		case images.MediaTypeDockerSchema2Manifest, ocispec.MediaTypeImageManifest,
+			images.MediaTypeDockerSchema2ManifestList, ocispec.MediaTypeImageIndex:
+		default:
+			return children, nil
+		}
+
+		for i := range children {
+			child := children[i]
+			if child.Annotations == nil {
+				child.Annotations = map[string]string{}
+			}
+
+			info, err := manager.Info(ctx, child.Digest)
+			if err != nil {
+				if errdefs.IsNotFound(err) {
+					if s, ok := sources[string(child.Digest)]; ok {
+						child.Annotations[s.key] = s.value
+						continue
+					}
+				}
+				return nil, err
+			}
+
+			for k, v := range info.Labels {
+				if !strings.HasPrefix(k, "containerd.io/distribution.source.") {
+					continue
+				}
+
+				child.Annotations[k] = v
+			}
+
+			children[i] = child
+		}
+		return children, nil
+	}
+}
+
+func collectSources(ctx context.Context, desc ocispec.Descriptor, store content.Store) (map[string]distributionSource, error) {
+	children, err := containerdimages.Children(ctx, store, desc)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, child := range children {
+		logrus.Infof("%s", child.Digest)
+	}
+
+	return nil, nil
+}
+
+type distributionSource struct {
+	key   string
+	value string
 }
