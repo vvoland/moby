@@ -307,7 +307,7 @@ func newRouterOptions(config *config.Config, d *daemon.Daemon) (routerOptions, e
 		DNSConfig:           config.DNSConfig,
 		ApparmorProfile:     daemon.DefaultApparmorProfile(),
 		UseSnapshotter:      d.UsesSnapshotter(),
-		Snapshotter:         d.ImageService().GraphDriverName(),
+		Snapshotter:         d.ImageService().StorageDriver(),
 		ContainerdAddress:   config.ContainerdAddr,
 		ContainerdNamespace: config.ContainerdNamespace,
 	})

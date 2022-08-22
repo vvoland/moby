@@ -90,7 +90,6 @@ type Daemon struct {
 	sysInfo               *sysinfo.SysInfo
 	shutdown              bool
 	idMapping             idtools.IdentityMapping
-	graphDriver           string        // TODO: move graphDriver field to an InfoService
 	PluginStore           *plugin.Store // TODO: remove
 	pluginManager         *plugin.Manager
 	linkIndex             *linkIndex
@@ -256,7 +255,7 @@ func (daemon *Daemon) restore(ctx context.Context) error {
 				return
 			}
 			// Ignore the container if it does not support the current driver being used by the graph
-			if (c.Driver == "" && daemon.graphDriver == "aufs") || c.Driver == daemon.graphDriver {
+			if driver := daemon.imageService.StorageDriver(); (c.Driver == "" && driver == "aufs") || c.Driver == driver {
 				if accessor, ok := daemon.imageService.(layerAccessor); ok {
 					rwlayer, err := accessor.GetLayerByID(c.ID)
 					if err != nil {
@@ -1005,7 +1004,6 @@ func NewDaemon(ctx context.Context, config *config.Config, pluginStore *plugin.S
 			return nil, err
 		}
 		d.imageService = ctrd.NewService(d.containerdCli, d.containers, snapshotter)
-		d.graphDriver = snapshotter
 	} else {
 		layerStore, err := layer.NewStoreFromOptions(layer.StoreOptions{
 			Root:                      config.Root,
@@ -1020,16 +1018,13 @@ func NewDaemon(ctx context.Context, config *config.Config, pluginStore *plugin.S
 			return nil, err
 		}
 
-		// As layerstore initialization may set the driver
-		d.graphDriver = layerStore.DriverName()
-
 		// Configure and validate the kernels security support. Note this is a Linux/FreeBSD
 		// operation only, so it is safe to pass *just* the runtime OS graphdriver.
-		if err := configureKernelSecuritySupport(config, d.graphDriver); err != nil {
+		if err := configureKernelSecuritySupport(config, layerStore.DriverName()); err != nil {
 			return nil, err
 		}
 
-		imageRoot := filepath.Join(config.Root, "image", d.graphDriver)
+		imageRoot := filepath.Join(config.Root, "image", layerStore.DriverName())
 		ifs, err := image.NewFSStoreBackend(filepath.Join(imageRoot, "imagedb"))
 		if err != nil {
 			return nil, err
@@ -1147,7 +1142,7 @@ func NewDaemon(ctx context.Context, config *config.Config, pluginStore *plugin.S
 	logrus.WithFields(logrus.Fields{
 		"version":     dockerversion.Version,
 		"commit":      dockerversion.GitCommit,
-		"graphdriver": d.graphDriver,
+		"graphdriver": d.ImageService().StorageDriver(),
 	}).Info("Docker daemon")
 
 	return d, nil
