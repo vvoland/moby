@@ -7,6 +7,7 @@ import (
 
 	"github.com/containerd/containerd"
 	cerrdefs "github.com/containerd/containerd/errdefs"
+	"github.com/containerd/containerd/plugin"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
@@ -70,7 +71,10 @@ func (i *ImageService) CreateLayer(container *container.Container, initFunc laye
 // LayerStoreStatus returns the status for each layer store
 // called from info.go
 func (i *ImageService) LayerStoreStatus() [][2]string {
-	return [][2]string{}
+	// TODO(thaJeztah) do we want to add more details about the driver here?
+	return [][2]string{
+		{"driver-type", string(plugin.SnapshotPlugin)},
+	}
 }
 
 // GetLayerMountID returns the mount ID for a layer
