@@ -46,7 +46,7 @@ func showProgress(ctx context.Context, ongoing *jobs, w io.Writer, updateFunc up
 		for {
 			select {
 			case <-ticker.C:
-				if !ongoing.IsResolved() {
+				if !done && !ongoing.IsResolved() {
 					continue
 				}
 				err := updateFunc(ctx, ongoing, out, start)
