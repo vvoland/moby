@@ -201,10 +201,13 @@ func annotateDistributionSourceHandler(f images.HandlerFunc, manager content.Man
 			info, err := manager.Info(ctx, child.Digest)
 			if err != nil {
 				if errdefs.IsNotFound(err) {
-					if s, ok := sources[string(child.Digest)]; ok {
-						child.Annotations[s.key] = s.value
-						continue
-					}
+					child.Annotations["containerd.io/distribution.source.docker.io"] = "library/alpine"
+					continue
+					/*
+						if s, ok := sources[string(child.Digest)]; ok {
+							child.Annotations[s.key] = s.value
+							continue
+						}*/
 				}
 				return nil, err
 			}
