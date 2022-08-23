@@ -1,7 +1,6 @@
 package containerd
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -11,7 +10,6 @@ import (
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/content"
-	"github.com/containerd/containerd/errdefs"
 	cerrdefs "github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
 	containerdimages "github.com/containerd/containerd/images"
@@ -20,6 +18,8 @@ import (
 	"github.com/containerd/containerd/remotes"
 	"github.com/docker/distribution/reference"
 	"github.com/docker/docker/api/types/registry"
+	"github.com/docker/docker/errdefs"
+	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -113,7 +113,6 @@ func push(ctx context.Context, c *containerd.Client, ref string, desc ocispec.De
 
 	wrapper := func(h images.Handler) images.Handler {
 		h = images.Handlers(imagesHandler, h)
-
 		return h
 	}
 
@@ -203,8 +202,8 @@ func annotateDistributionSourceHandler(f images.HandlerFunc, manager content.Man
 
 			info, err := manager.Info(ctx, child.Digest)
 			if err != nil {
-				if errdefs.IsNotFound(err) {
-					if s, ok := sources[string(child.Digest)]; ok {
+				if cerrdefs.IsNotFound(err) {
+					if s, ok := sources[child.Digest.String()]; ok {
 						child.Annotations[s.key] = s.value
 						continue
 					}
@@ -227,99 +226,34 @@ func annotateDistributionSourceHandler(f images.HandlerFunc, manager content.Man
 }
 
 func collectSources(ctx context.Context, desc ocispec.Descriptor, store content.Store) (map[string]distributionSource, error) {
-	children, err := containerdimages.Children(ctx, store, desc)
-	if err != nil {
-		return nil, err
-	}
+	queue := []ocispec.Descriptor{desc}
 
 	sources := make(map[string]distributionSource)
 
-	for len(children) > 0 {
-		child := children[0]
-		children = children[1:]
+	for len(queue) > 0 {
+		child := queue[0]
+		queue = queue[1:]
 
-		logrus.WithField("desc", child.Digest).Info("check source")
-		_, err := store.ReaderAt(ctx, child)
-
-		if err != nil && cerrdefs.IsNotFound(err) {
-			wanted := child.Digest
-			var source distributionSource
-			store.Walk(ctx, func(i content.Info) error {
-				// We already found it, just return early
-				if source.value != "" {
-					return nil
-				}
-
-				var is distributionSource
-				// Check if this blob has a distributionSource label
-				for k, v := range i.Labels {
-					registry := strings.TrimPrefix(k, "containerd.io/distribution.source.")
-
-					if registry != k {
-						is.key = k
-						is.value = v
-						break
-					}
-				}
-
-				// Nah, we're looking for a parent of this poor orphan.
-				// This blob will not provide us with the source.
-				if is.value == "" {
-					return nil
-				}
-
-				log := logrus.WithField("digest", i.Digest)
-
-				readerAt, err := store.ReaderAt(ctx, ocispec.Descriptor{Digest: i.Digest})
-				if err != nil {
-					log.WithError(err).Warn("failed to read content")
-					return err
-				}
-
-				buffer := bytes.NewBuffer(make([]byte, 0, i.Size))
-				reader := content.NewReader(readerAt)
-
-				n, err := io.Copy(buffer, reader)
-				if err != nil {
-					return err
-				}
-				if n != i.Size {
-					log.Warn("read less than expected")
-				}
-
-				var manifest ocispec.Manifest
-
-				err = json.Unmarshal(buffer.Bytes(), &manifest)
-				if err != nil {
-					logrus.Debug(buffer.String())
-					log.WithError(err).WithField("type", manifest.MediaType).Info("not a manifest")
-					return nil
-				}
-
-				// Just in case, check if the manifest identifies itself as a manifest.
-				if !containerdimages.IsManifestType(manifest.MediaType) {
-					log.WithField("type", manifest.MediaType).Info("not a manifest")
-					return nil
-				}
-
-				for _, layer := range manifest.Layers {
-					log.WithField("wanted", wanted).WithField("layer", layer.Digest).Info("* check layer")
-					if layer.Digest == wanted {
-						source = is
-						return nil
-					}
-				}
-
-				return nil
-			})
-
-			if source.value == "" {
-				logrus.WithField("digest", wanted).Error("failed to find source")
-				return sources, errors.New("failed to find source")
-			}
-
-			sources[child.Digest.String()] = source
+		if containerdimages.IsNonDistributable(child.MediaType) {
 			continue
+		}
+
+		if containerdimages.IsLayerType(child.MediaType) {
+			_, err := store.ReaderAt(ctx, child)
+			if err != nil && cerrdefs.IsNotFound(err) {
+				source, err := findSource(ctx, store, child.Digest)
+
+				if err != nil {
+					return sources, err
+				}
+				if source.value == "" {
+					logrus.WithField("digest", child.Digest).Error("failed to find source")
+					return sources, errors.New("failed to find source")
+				}
+
+				sources[child.Digest.String()] = source
+				continue
+			}
 		}
 
 		newChildren, err := containerdimages.Children(ctx, store, child)
@@ -327,9 +261,8 @@ func collectSources(ctx context.Context, desc ocispec.Descriptor, store content.
 			return sources, err
 		}
 
-		logrus.WithField("desc", child.Digest).WithField("new", newChildren).Info("add new")
 		if len(newChildren) > 0 {
-			children = append(children, newChildren...)
+			queue = append(queue, newChildren...)
 		}
 	}
 
@@ -339,4 +272,64 @@ func collectSources(ctx context.Context, desc ocispec.Descriptor, store content.
 type distributionSource struct {
 	key   string
 	value string
+}
+
+func findSource(ctx context.Context, store content.Store, orphan digest.Digest) (distributionSource, error) {
+	var source distributionSource
+
+	success := errors.New("success, found the source but can't return earlier without an error")
+
+	err := store.Walk(ctx, func(i content.Info) error {
+		var is distributionSource
+		// Check if this blob has a distributionSource label
+		for k, v := range i.Labels {
+			registry := strings.TrimPrefix(k, "containerd.io/distribution.source.")
+
+			if registry != k {
+				is.key = k
+				is.value = v
+				break
+			}
+		}
+
+		// Nah, we're looking for a parent of this poor orphan.
+		// This blob will not provide us with the source.
+		if is.value == "" {
+			return nil
+		}
+
+		blob, err := content.ReadBlob(ctx, store, ocispec.Descriptor{Digest: i.Digest})
+		if err != nil {
+			return err
+		}
+
+		var manifest ocispec.Manifest
+		err = json.Unmarshal(blob, &manifest)
+		if err != nil {
+			return nil
+		}
+
+		// Just in case, check if the manifest identifies itself as a manifest.
+		if !containerdimages.IsManifestType(manifest.MediaType) {
+			return nil
+		}
+
+		for _, layer := range manifest.Layers {
+			if layer.Digest == orphan {
+				source = is
+				return success
+			}
+		}
+
+		return nil
+	})
+
+	if err == success {
+		err = nil
+	}
+	if source.value == "" {
+		err = errdefs.NotFound(fmt.Errorf("missing blob %s and no source can be found", orphan))
+	}
+
+	return source, err
 }
