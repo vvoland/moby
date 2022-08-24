@@ -133,12 +133,10 @@ func findLazyChildren(ctx context.Context, desc ocispec.Descriptor, store conten
 			continue
 		}
 
-		if containerdimages.IsLayerType(child.MediaType) {
-			_, err := store.ReaderAt(ctx, child)
-			if err != nil && cerrdefs.IsNotFound(err) {
-				set[child.Digest.String()] = child
-				continue
-			}
+		_, err := store.ReaderAt(ctx, child)
+		if err != nil && cerrdefs.IsNotFound(err) {
+			set[child.Digest.String()] = child
+			continue
 		}
 
 		newChildren, err := containerdimages.Children(ctx, store, child)
@@ -154,10 +152,32 @@ func findLazyChildren(ctx context.Context, desc ocispec.Descriptor, store conten
 	result := []ocispec.Descriptor{}
 	for _, desc := range set {
 		result = append(result, desc)
+		logrus.WithField("desc", desc).Debug("lazy children found")
 	}
 
 	return result, nil
 
+}
+
+// Do a small peek of the content to check if content is definitely not a json.
+// Returns true when content is definitely not a json.
+// If it returns false, then the content may still not be a json.
+func peekNotJson(ctx context.Context, store content.Store, desc ocispec.Descriptor) (bool, error) {
+	readerAt, err := store.ReaderAt(ctx, desc)
+	if err != nil {
+		logrus.WithError(err).WithField("digest", desc.Digest).Debug("failed to create reader to peek for json")
+		return false, err
+	}
+
+	buffer := []byte{0}
+	n, err := readerAt.ReadAt(buffer, 0)
+	if n != 1 || err != nil {
+		logrus.WithError(err).WithField("digest", desc.Digest).Debug("failed to peek json")
+		return false, err
+	}
+
+	// It doesn't start with {, then it's not a json.
+	return rune(buffer[0]) != '{', nil
 }
 
 func collectSources(ctx context.Context, desc ocispec.Descriptor, store content.Store) (map[string]distributionSource, error) {
@@ -179,23 +199,53 @@ func collectSources(ctx context.Context, desc ocispec.Descriptor, store content.
 			return nil
 		}
 
-		// Read the manifest
-		blob, err := content.ReadBlob(ctx, store, ocispec.Descriptor{Digest: i.Digest})
+		desc := ocispec.Descriptor{Digest: i.Digest}
+
+		// Do a simple peek of the content to avoid big blobs which definitely aren't json.
+		notJson, err := peekNotJson(ctx, store, desc)
 		if err != nil {
 			return err
 		}
-		var manifest ocispec.Manifest
-		err = json.Unmarshal(blob, &manifest)
+		if notJson {
+			logrus.WithField("digest", i.Digest).Debug("skipping, definitely not a json")
+			return nil
+		}
+
+		// Read the manifest
+		blob, err := content.ReadBlob(ctx, store, desc)
 		if err != nil {
+			logrus.WithError(err).WithField("digest", i.Digest).Error("error reading blob")
+			return err
+		}
+		logrus.WithField("i", i).Debug("# read blob")
+
+		var indexOrManifest struct {
+			MediaType string `json:"mediaType,omitempty"`
+
+			Manifests []ocispec.Descriptor `json:"manifests,omitempty"`
+			Layers    []ocispec.Descriptor `json:"layers,omitempty"`
+		}
+		err = json.Unmarshal(blob, &indexOrManifest)
+		if err != nil {
+			logrus.WithError(err).WithField("digest", i.Digest).Debug("error unmarshaling blob")
 			return nil
 		}
 
-		// Just in case, check if the manifest identifies itself as a manifest.
-		if !containerdimages.IsManifestType(manifest.MediaType) {
+		logrus.WithField("i", i).Debug("# unmarshalled")
+
+		mediaType := indexOrManifest.MediaType
+		// Just in case, check if it really is manifest or index.
+		if !containerdimages.IsManifestType(mediaType) && !containerdimages.IsIndexType(mediaType) {
+			return nil
+		}
+		if len(indexOrManifest.Layers) == 0 && len(indexOrManifest.Manifests) == 0 {
 			return nil
 		}
 
-		for _, layer := range manifest.Layers {
+		logrus.WithField("i", i).Debug("# go layers")
+		children := append(indexOrManifest.Layers, indexOrManifest.Manifests...)
+
+		for _, layer := range children {
 			for idx, wanted := range lazyChildren {
 				if layer.Digest == wanted.Digest {
 					// Found it!
