@@ -987,28 +987,27 @@ func NewDaemon(ctx context.Context, config *config.Config, pluginStore *plugin.S
 	// Unix platforms however run a single graphdriver for all containers, and it can
 	// be set through an environment variable, a daemon start parameter, or chosen through
 	// initialization of the layerstore through driver priority order for example.
-	graphDriver := os.Getenv("DOCKER_DRIVER")
+	driverName := os.Getenv("DOCKER_DRIVER")
 	if isWindows {
-		graphDriver = "windowsfilter"
-	} else if graphDriver != "" {
-		logrus.Infof("Setting the storage driver from the $DOCKER_DRIVER environment variable (%s)", graphDriver)
+		driverName = "windowsfilter"
+	} else if driverName != "" {
+		logrus.Infof("Setting the storage driver from the $DOCKER_DRIVER environment variable (%s)", driverName)
 	} else {
-		graphDriver = config.GraphDriver
+		driverName = config.GraphDriver
 	}
 
 	if d.UsesSnapshotter() {
-		snapshotter := ctrd.SnapshotterFromGraphDriver(graphDriver)
 		// Configure and validate the kernels security support. Note this is a Linux/FreeBSD
 		// operation only, so it is safe to pass *just* the runtime OS graphdriver.
-		if err := configureKernelSecuritySupport(config, snapshotter); err != nil {
+		if err := configureKernelSecuritySupport(config, driverName); err != nil {
 			return nil, err
 		}
-		d.imageService = ctrd.NewService(d.containerdCli, d.containers, snapshotter)
+		d.imageService = ctrd.NewService(d.containerdCli, d.containers, driverName)
 	} else {
 		layerStore, err := layer.NewStoreFromOptions(layer.StoreOptions{
 			Root:                      config.Root,
 			MetadataStorePathTemplate: filepath.Join(config.Root, "image", "%s", "layerdb"),
-			GraphDriver:               graphDriver,
+			GraphDriver:               driverName,
 			GraphDriverOptions:        config.GraphOptions,
 			IDMapping:                 idMapping,
 			PluginGetter:              d.PluginStore,
