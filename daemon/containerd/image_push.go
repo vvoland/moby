@@ -171,19 +171,7 @@ func collectSources(ctx context.Context, desc ocispec.Descriptor, store content.
 
 	success := errors.New("success, found the source but can't return earlier without an error")
 	err = store.Walk(ctx, func(i content.Info) error {
-		var source distributionSource
-
-		// Check if this blob has a distributionSource label
-		// if yes, read it as source
-		for k, v := range i.Labels {
-			registry := strings.TrimPrefix(k, "containerd.io/distribution.source.")
-
-			if registry != k {
-				source.key = k
-				source.value = v
-				break
-			}
-		}
+		source := extractDistributionSource(i.Labels)
 
 		// Nah, we're looking for a parent of this lazy child.
 		// This one will not provide us with the source.
@@ -245,6 +233,24 @@ func collectSources(ctx context.Context, desc ocispec.Descriptor, store content.
 	}
 
 	return sources, err
+}
+
+func extractDistributionSource(labels map[string]string) distributionSource {
+	var source distributionSource
+
+	// Check if this blob has a distributionSource label
+	// if yes, read it as source
+	for k, v := range labels {
+		registry := strings.TrimPrefix(k, "containerd.io/distribution.source.")
+
+		if registry != k {
+			source.key = k
+			source.value = v
+			break
+		}
+	}
+
+	return source
 }
 
 type distributionSource struct {
