@@ -118,8 +118,10 @@ func push(ctx context.Context, c *containerd.Client, ref string, desc ocispec.De
 
 	var limiter *semaphore.Weighted
 
+	pushSource := newLazyContentStore(c.ContentStore(), sources)
+
 	logrus.WithField("desc", desc).WithField("ref", ref).Info("Pushing desc to remote ref")
-	return pushContent(ctx, pusher, desc, c.ContentStore(), limiter, platforms.All, wrapper, sources)
+	return pushContent(ctx, pusher, desc, pushSource, limiter, platforms.All, wrapper, sources)
 }
 
 func pushContent(ctx context.Context, pusher remotes.Pusher, desc ocispec.Descriptor, store content.Store, limiter *semaphore.Weighted, platform platforms.MatchComparer, wrapper func(h images.Handler) images.Handler, sources map[string]distributionSource) error {
