@@ -178,24 +178,25 @@ func (daemon *Daemon) containerStart(ctx context.Context, container *container.C
 		return err
 	}
 
-	newContainerOpts := []containerd.NewContainerOpts{}
-	if daemon.UsesSnapshotter() {
-		newContainerOpts = append(newContainerOpts, containerd.WithSnapshotter(container.Driver))
-		newContainerOpts = append(newContainerOpts, containerd.WithSnapshot(container.ID))
-		c8dImge, err := daemon.imageService.(containerdImage).GetContainerdImage(ctx, container.Config.Image, &v1.Platform{})
-		if err != nil {
-			return err
-		}
-		ctrdimg := containerd.NewImage(daemon.containerdCli, c8dImge)
-		newContainerOpts = append(newContainerOpts, containerd.WithImage(ctrdimg))
-	}
-
 	createContainer := true
+
+	var newContainerOpts []containerd.NewContainerOpts
 	if daemon.UsesSnapshotter() {
 		// When using the containerd snapshotters we want to reuse the existing containerd container
-		_, err := daemon.containerdCli.LoadContainer(ctx, container.ID)
+		_, err = daemon.containerdCli.LoadContainer(ctx, container.ID)
 		if err == nil {
 			createContainer = false
+		} else {
+			c8dImge, err := daemon.imageService.(containerdImage).GetContainerdImage(ctx, container.Config.Image, &v1.Platform{})
+			if err != nil {
+				return err
+			}
+
+			newContainerOpts = append(newContainerOpts,
+				containerd.WithSnapshotter(container.Driver),
+				containerd.WithSnapshot(container.ID),
+				containerd.WithImage(containerd.NewImage(daemon.containerdCli, c8dImge)),
+			)
 		}
 	}
 
