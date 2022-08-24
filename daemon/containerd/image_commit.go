@@ -79,7 +79,7 @@ func (i *ImageService) CommitImage(ctx context.Context, cc backend.CommitConfig)
 
 	var (
 		differ = i.client.DiffService()
-		sn     = i.client.SnapshotService(containerd.DefaultSnapshotter)
+		sn     = i.client.SnapshotService(i.snapshotter)
 	)
 
 	// Don't gc me and clean the dirty data after 1 hour!
@@ -105,7 +105,7 @@ func (i *ImageService) CommitImage(ctx context.Context, cc backend.CommitConfig)
 	}
 
 	layers := append(ocimanifest.Layers, diffLayerDesc)
-	commitManifestDesc, configDigest, err := writeContentsForImage(ctx, containerd.DefaultSnapshotter, baseImg, imageConfig, layers)
+	commitManifestDesc, configDigest, err := writeContentsForImage(ctx, i.snapshotter, baseImg, imageConfig, layers)
 	if err != nil {
 		return "", err
 	}
