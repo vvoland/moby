@@ -19,7 +19,6 @@ import (
 	"github.com/docker/distribution/reference"
 	"github.com/docker/docker/api/types/registry"
 	"github.com/docker/docker/errdefs"
-	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -227,10 +226,9 @@ func annotateDistributionSourceHandler(f images.HandlerFunc, manager content.Man
 	}
 }
 
-func collectSources(ctx context.Context, desc ocispec.Descriptor, store content.Store) (map[string]distributionSource, error) {
+func findLazyChildren(ctx context.Context, desc ocispec.Descriptor, store content.Store) ([]ocispec.Descriptor, error) {
+	result := []ocispec.Descriptor{}
 	queue := []ocispec.Descriptor{desc}
-
-	sources := make(map[string]distributionSource)
 
 	for len(queue) > 0 {
 		child := queue[0]
@@ -243,24 +241,14 @@ func collectSources(ctx context.Context, desc ocispec.Descriptor, store content.
 		if containerdimages.IsLayerType(child.MediaType) {
 			_, err := store.ReaderAt(ctx, child)
 			if err != nil && cerrdefs.IsNotFound(err) {
-				source, err := findSource(ctx, store, child.Digest)
-
-				if err != nil {
-					return sources, err
-				}
-				if source.value == "" {
-					logrus.WithField("digest", child.Digest).Error("failed to find source")
-					return sources, errors.New("failed to find source")
-				}
-
-				sources[child.Digest.String()] = source
+				result = append(result, child)
 				continue
 			}
 		}
 
 		newChildren, err := containerdimages.Children(ctx, store, child)
 		if err != nil {
-			return sources, err
+			return result, err
 		}
 
 		if len(newChildren) > 0 {
@@ -268,43 +256,46 @@ func collectSources(ctx context.Context, desc ocispec.Descriptor, store content.
 		}
 	}
 
-	return sources, nil
+	return result, nil
+
 }
 
-type distributionSource struct {
-	key   string
-	value string
-}
+func collectSources(ctx context.Context, desc ocispec.Descriptor, store content.Store) (map[string]distributionSource, error) {
+	lazyChildren, err := findLazyChildren(ctx, desc, store)
+	if err != nil {
+		logrus.WithField("desc", desc).WithError(err).Error("failed to find lazy children referenced by descriptor")
+		return nil, err
+	}
 
-func findSource(ctx context.Context, store content.Store, orphan digest.Digest) (distributionSource, error) {
-	var source distributionSource
+	sources := map[string]distributionSource{}
 
 	success := errors.New("success, found the source but can't return earlier without an error")
+	err = store.Walk(ctx, func(i content.Info) error {
+		var source distributionSource
 
-	err := store.Walk(ctx, func(i content.Info) error {
-		var is distributionSource
 		// Check if this blob has a distributionSource label
+		// if yes, read it as source
 		for k, v := range i.Labels {
 			registry := strings.TrimPrefix(k, "containerd.io/distribution.source.")
 
 			if registry != k {
-				is.key = k
-				is.value = v
+				source.key = k
+				source.value = v
 				break
 			}
 		}
 
-		// Nah, we're looking for a parent of this poor orphan.
-		// This blob will not provide us with the source.
-		if is.value == "" {
+		// Nah, we're looking for a parent of this lazy child.
+		// This one will not provide us with the source.
+		if source.value == "" {
 			return nil
 		}
 
+		// Read the manifest
 		blob, err := content.ReadBlob(ctx, store, ocispec.Descriptor{Digest: i.Digest})
 		if err != nil {
 			return err
 		}
-
 		var manifest ocispec.Manifest
 		err = json.Unmarshal(blob, &manifest)
 		if err != nil {
@@ -317,9 +308,22 @@ func findSource(ctx context.Context, store content.Store, orphan digest.Digest) 
 		}
 
 		for _, layer := range manifest.Layers {
-			if layer.Digest == orphan {
-				source = is
-				return success
+			for idx, wanted := range lazyChildren {
+				if layer.Digest == wanted.Digest {
+					// Found it!
+					sources[wanted.Digest.String()] = source
+
+					// Don't look for it anymore
+					if len(lazyChildren) > 1 {
+						lastIdx := len(lazyChildren) - 1
+						lazyChildren[idx] = lazyChildren[lastIdx]
+						lazyChildren = lazyChildren[:lastIdx]
+					} else {
+						// We found all lazy children, let's end the walk.
+						lazyChildren = lazyChildren[:0]
+						return success
+					}
+				}
 			}
 		}
 
@@ -329,9 +333,21 @@ func findSource(ctx context.Context, store content.Store, orphan digest.Digest) 
 	if err == success {
 		err = nil
 	}
-	if source.value == "" {
-		err = errdefs.NotFound(fmt.Errorf("missing blob %s and no source can be found", orphan))
+	if len(lazyChildren) > 0 {
+		msg := "missing blobs with no source: "
+		for idx, c := range lazyChildren {
+			if idx != 0 {
+				msg += ", "
+			}
+			msg += c.Digest.String()
+		}
+		err = errdefs.NotFound(errors.New(msg))
 	}
 
-	return source, err
+	return sources, err
+}
+
+type distributionSource struct {
+	key   string
+	value string
 }
