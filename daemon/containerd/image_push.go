@@ -120,9 +120,11 @@ func push(ctx context.Context, store content.Store, ref string, desc ocispec.Des
 }
 
 func findLazyChildren(ctx context.Context, desc ocispec.Descriptor, store content.Store) ([]ocispec.Descriptor, error) {
-	result := []ocispec.Descriptor{}
-	queue := []ocispec.Descriptor{desc}
+	// Collect to hashset to remove duplicates
+	set := map[string]ocispec.Descriptor{}
 
+	// Do a breadth-first search starting from this descriptor
+	queue := []ocispec.Descriptor{desc}
 	for len(queue) > 0 {
 		child := queue[0]
 		queue = queue[1:]
@@ -134,19 +136,24 @@ func findLazyChildren(ctx context.Context, desc ocispec.Descriptor, store conten
 		if containerdimages.IsLayerType(child.MediaType) {
 			_, err := store.ReaderAt(ctx, child)
 			if err != nil && cerrdefs.IsNotFound(err) {
-				result = append(result, child)
+				set[child.Digest.String()] = child
 				continue
 			}
 		}
 
 		newChildren, err := containerdimages.Children(ctx, store, child)
 		if err != nil {
-			return result, err
+			return nil, err
 		}
 
 		if len(newChildren) > 0 {
 			queue = append(queue, newChildren...)
 		}
+	}
+
+	result := []ocispec.Descriptor{}
+	for _, desc := range set {
+		result = append(result, desc)
 	}
 
 	return result, nil
