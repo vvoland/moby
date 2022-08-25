@@ -1003,8 +1003,8 @@ func NewDaemon(ctx context.Context, config *config.Config, pluginStore *plugin.S
 	}
 
 	if d.UsesSnapshotter() {
-		// FIXME(thaJeztah): implement automatic snapshotter-selection similar to graph-driver selection; see https://github.com/moby/moby/issues/44076
-		if driverName == "" {
+		// FIXME(thaJeztah): implement snapshotter-selection similar to automatic graph-driver selection
+		if driverName == "" || driverName == "overlay2" || driverName == "overlay" {
 			driverName = containerd.DefaultSnapshotter
 		}
 
