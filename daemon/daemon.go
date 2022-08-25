@@ -1004,6 +1004,11 @@ func NewDaemon(ctx context.Context, config *config.Config, pluginStore *plugin.S
 	}
 
 	if d.UsesSnapshotter() {
+		// FIXME(thaJeztah): implement snapshotter-selection similar to automatic graph-driver selection
+		if driverName == "" || driverName == "overlay2" || driverName == "overlay" {
+			driverName = containerd.DefaultSnapshotter
+		}
+
 		// Configure and validate the kernels security support. Note this is a Linux/FreeBSD
 		// operation only, so it is safe to pass *just* the runtime OS graphdriver.
 		if err := configureKernelSecuritySupport(config, driverName); err != nil {
