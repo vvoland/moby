@@ -7,9 +7,8 @@ import (
 	"github.com/docker/go-connections/tlsconfig"
 )
 
-func (s *defaultService) lookupV2Endpoints(hostname string) (endpoints []APIEndpoint, err error) {
+func (s *Service) lookupV2Endpoints(hostname string) (endpoints []APIEndpoint, err error) {
 	ana := s.config.allowNondistributableArtifacts(hostname)
-
 	if hostname == DefaultNamespace || hostname == IndexHostname {
 		for _, mirror := range s.config.Mirrors {
 			if !strings.HasPrefix(mirror, "http://") && !strings.HasPrefix(mirror, "https://") {
