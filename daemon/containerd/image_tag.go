@@ -2,6 +2,7 @@ package containerd
 
 import (
 	"context"
+	"time"
 
 	containerdimages "github.com/containerd/containerd/images"
 	"github.com/docker/distribution/reference"
@@ -35,14 +36,17 @@ func (i *ImageService) TagImage(ctx context.Context, imageName, repository, tag 
 func (i *ImageService) TagImageWithReference(ctx context.Context, imageID image.ID, newTag reference.Named) error {
 	logrus.Infof("Tagging image %q with reference %q", imageID, newTag.String())
 
-	desc, err := i.ResolveImage(ctx, imageID.String())
+	cimg, _, err := i.getImage(ctx, imageID.String())
 	if err != nil {
 		return err
 	}
 
 	img := containerdimages.Image{
-		Name:   newTag.String(),
-		Target: desc,
+		Name:      newTag.String(),
+		Target:    cimg.Target(),
+		Labels:    cimg.Labels(),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
 
 	is := i.client.ImageService()
