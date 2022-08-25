@@ -36,6 +36,7 @@ import (
 	"github.com/docker/docker/daemon/images"
 	"github.com/docker/docker/daemon/logger"
 	"github.com/docker/docker/daemon/network"
+	"github.com/docker/docker/daemon/search"
 	"github.com/docker/docker/daemon/stats"
 	dmetadata "github.com/docker/docker/distribution/metadata"
 	"github.com/docker/docker/dockerversion"
@@ -78,10 +79,11 @@ type Daemon struct {
 	containersReplica     container.ViewDB
 	execCommands          *exec.Store
 	imageService          ImageService
+	searchService         *search.Service
 	configStore           *config.Config
 	statsCollector        *stats.Collector
 	defaultLogConfig      containertypes.LogConfig
-	registryService       registry.Service
+	registryService       *registry.Service
 	EventsService         *events.Events
 	netController         libnetwork.NetworkController
 	volumes               *volumesservice.VolumesService
@@ -851,6 +853,11 @@ func NewDaemon(ctx context.Context, config *config.Config, pluginStore *plugin.S
 		}
 	}
 
+	d.searchService, err = search.NewService(registry.SearchServiceOptions{ServiceOptions: config.ServiceOptions})
+	if err != nil {
+		return nil, err
+	}
+
 	d.registryService = registryService
 	logger.RegisterPluginGetter(d.PluginStore)
 
@@ -1461,6 +1468,11 @@ func (daemon *Daemon) IdentityMapping() idtools.IdentityMapping {
 // ImageService returns the Daemon's ImageService
 func (daemon *Daemon) ImageService() ImageService {
 	return daemon.imageService
+}
+
+// SearchService returns the backend used for searching images.
+func (daemon *Daemon) SearchService() *search.Service {
+	return daemon.searchService
 }
 
 // BuilderBackend returns the backend used by builder
