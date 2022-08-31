@@ -85,7 +85,7 @@ func (i *ImageService) PushImage(ctx context.Context, image, tag string, metaHea
 	})
 	imageHandler = remotes.SkipNonDistributableBlobs(imageHandler)
 
-	resolver, tracker := newResolverFromAuthConfig(authConfig)
+	resolver, tracker := i.newResolverFromAuthConfig(authConfig)
 
 	finishProgress := showProgress(ctx, jobs, outStream, pushProgress(tracker))
 	defer finishProgress()
