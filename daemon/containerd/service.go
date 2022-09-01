@@ -15,6 +15,7 @@ import (
 	"github.com/docker/docker/errdefs"
 	"github.com/docker/docker/image"
 	"github.com/docker/docker/layer"
+	"github.com/docker/docker/registry"
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/identity"
 	"github.com/pkg/errors"
@@ -23,12 +24,13 @@ import (
 
 // ImageService implements daemon.ImageService
 type ImageService struct {
-	client        *containerd.Client
-	snapshotter   string
-	usage         singleflight.Group
-	containers    container.Store
-	pruneRunning  int32
-	registryHosts RegistryHostsProvider
+	client          *containerd.Client
+	snapshotter     string
+	usage           singleflight.Group
+	containers      container.Store
+	pruneRunning    int32
+	registryHosts   RegistryHostsProvider
+	registryService *registry.Service
 }
 
 type RegistryHostsProvider interface {
@@ -36,12 +38,13 @@ type RegistryHostsProvider interface {
 }
 
 // NewService creates a new ImageService.
-func NewService(c *containerd.Client, containers container.Store, snapshotter string, hostsProvider RegistryHostsProvider) *ImageService {
+func NewService(c *containerd.Client, containers container.Store, snapshotter string, hostsProvider RegistryHostsProvider, registry *registry.Service) *ImageService {
 	return &ImageService{
-		client:        c,
-		containers:    containers,
-		snapshotter:   snapshotter,
-		registryHosts: hostsProvider,
+		client:          c,
+		containers:      containers,
+		snapshotter:     snapshotter,
+		registryHosts:   hostsProvider,
+		registryService: registry,
 	}
 }
 
