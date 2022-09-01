@@ -14,6 +14,7 @@ import (
 	"github.com/docker/distribution/reference"
 	"github.com/docker/docker/api/types/registry"
 	"github.com/docker/docker/errdefs"
+	"github.com/docker/docker/pkg/streamformatter"
 	"github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 )
@@ -58,7 +59,8 @@ func (i *ImageService) PullImage(ctx context.Context, image, tagOrDigest string,
 	opts = append(opts, containerd.WithImageHandler(h))
 	opts = i.applySnapshotterOpts(opts, ref)
 
-	finishProgress := showProgress(ctx, jobs, outStream, pullProgress(i.client.ContentStore()))
+	out := streamformatter.NewJSONProgressOutput(outStream, false)
+	finishProgress := showProgress(ctx, jobs, out, pullProgress(i.client.ContentStore(), true))
 	defer finishProgress()
 
 	_, err = i.client.Pull(ctx, ref.String(), opts...)
