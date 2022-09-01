@@ -2,7 +2,6 @@ package containerd
 
 import (
 	"context"
-	"io"
 	"sync"
 	"time"
 
@@ -12,7 +11,6 @@ import (
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/docker/docker/pkg/progress"
-	"github.com/docker/docker/pkg/streamformatter"
 	"github.com/docker/docker/pkg/stringid"
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -21,12 +19,11 @@ import (
 
 type updateProgressFunc func(ctx context.Context, ongoing *jobs, output progress.Output, start time.Time) error
 
-func showProgress(ctx context.Context, ongoing *jobs, w io.Writer, updateFunc updateProgressFunc) func() {
+func showProgress(ctx context.Context, ongoing *jobs, out progress.Output, updateFunc updateProgressFunc) func() {
 	stop := make(chan struct{})
 	ctx, cancelProgress := context.WithCancel(ctx)
 
 	var (
-		out    = streamformatter.NewJSONProgressOutput(w, false)
 		ticker = time.NewTicker(100 * time.Millisecond)
 		start  = time.Now()
 	)
@@ -69,6 +66,18 @@ func showProgress(ctx context.Context, ongoing *jobs, w io.Writer, updateFunc up
 	}
 }
 
+func combineProgress(fns ...updateProgressFunc) updateProgressFunc {
+	return func(ctx context.Context, ongoing *jobs, out progress.Output, start time.Time) error {
+		for _, f := range fns {
+			err := f(ctx, ongoing, out, start)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+}
+
 func pushProgress(tracker docker.StatusTracker) updateProgressFunc {
 	return func(ctx context.Context, ongoing *jobs, out progress.Output, start time.Time) error {
 		for _, j := range ongoing.Jobs() {
@@ -106,7 +115,7 @@ func pushProgress(tracker docker.StatusTracker) updateProgressFunc {
 	}
 }
 
-func pullProgress(cs content.Store) updateProgressFunc {
+func pullProgress(cs content.Store, showExists bool) updateProgressFunc {
 	return func(ctx context.Context, ongoing *jobs, out progress.Output, start time.Time) error {
 		pulling := map[string]content.Status{}
 		actives, err := cs.ListStatuses(ctx, "")
@@ -144,7 +153,7 @@ func pullProgress(cs content.Store) updateProgressFunc {
 					LastUpdate: true,
 				})
 				ongoing.Remove(j)
-			} else {
+			} else if showExists {
 				out.WriteProgress(progress.Progress{
 					ID:         stringid.TruncateID(j.Digest.Encoded()),
 					Action:     "Exists",
