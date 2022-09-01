@@ -146,3 +146,9 @@ func (s *Service) LookupPushEndpoints(hostname string) (endpoints []APIEndpoint,
 	}
 	return endpoints, err
 }
+
+// IsInsecureRegistry returns true if the registry at given host is configured as
+// insecure registry.
+func (s *Service) IsInsecureRegistry(host string) bool {
+	return !s.config.isSecureIndex(host)
+}
