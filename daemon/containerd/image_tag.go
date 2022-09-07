@@ -35,14 +35,15 @@ func (i *ImageService) TagImage(ctx context.Context, imageName, repository, tag 
 func (i *ImageService) TagImageWithReference(ctx context.Context, imageID image.ID, newTag reference.Named) error {
 	logrus.Infof("Tagging image %q with reference %q", imageID, newTag.String())
 
-	desc, err := i.ResolveImage(ctx, imageID.String())
+	ci, _, err := i.getImage(ctx, imageID.String())
 	if err != nil {
 		return err
 	}
 
 	img := containerdimages.Image{
 		Name:   newTag.String(),
-		Target: desc,
+		Target: ci.Target(),
+		Labels: ci.Labels(),
 	}
 
 	is := i.client.ImageService()
