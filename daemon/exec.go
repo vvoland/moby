@@ -252,7 +252,7 @@ func (daemon *Daemon) ContainerExecStart(ctx context.Context, name string, optio
 		p.Cwd = "/"
 	}
 
-	if err := daemon.execSetPlatformOpt(ctx, ec, p); err != nil {
+	if err := daemon.execSetPlatformOpt(ctx, ec.Container, ec, p); err != nil {
 		return err
 	}
 
