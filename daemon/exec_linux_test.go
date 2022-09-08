@@ -82,7 +82,7 @@ func TestExecSetPlatformOptAppArmor(t *testing.T) {
 				ec := &container.ExecConfig{Container: c, Privileged: execPrivileged}
 				p := &specs.Process{}
 
-				err := d.execSetPlatformOpt(context.Background(), ec, p)
+				err := d.execSetPlatformOpt(context.TODO(), c, ec, p)
 				assert.NilError(t, err)
 				assert.Equal(t, p.ApparmorProfile, tc.expectedProfile)
 			})
