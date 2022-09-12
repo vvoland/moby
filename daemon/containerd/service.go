@@ -8,6 +8,7 @@ import (
 	"github.com/containerd/containerd"
 	cerrdefs "github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/plugin"
+	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
@@ -15,6 +16,7 @@ import (
 	"github.com/docker/docker/daemon/images"
 	"github.com/docker/docker/image"
 	"github.com/docker/docker/layer"
+	"github.com/docker/docker/registry"
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/identity"
 	"golang.org/x/sync/singleflight"
@@ -22,19 +24,27 @@ import (
 
 // ImageService implements daemon.ImageService
 type ImageService struct {
-	client       *containerd.Client
-	usage        singleflight.Group
-	containers   container.Store
-	snapshotter  string
-	pruneRunning int32
+	client          *containerd.Client
+	usage           singleflight.Group
+	containers      container.Store
+	snapshotter     string
+	pruneRunning    int32
+	registryHosts   RegistryHostsProvider
+	registryService *registry.Service
+}
+
+type RegistryHostsProvider interface {
+	RegistryHosts() docker.RegistryHosts
 }
 
 // NewService creates a new ImageService.
-func NewService(c *containerd.Client, containers container.Store, snapshotter string) *ImageService {
+func NewService(c *containerd.Client, containers container.Store, snapshotter string, hostsProvider RegistryHostsProvider, registry *registry.Service) *ImageService {
 	return &ImageService{
-		client:      c,
-		containers:  containers,
-		snapshotter: snapshotter,
+		client:          c,
+		containers:      containers,
+		snapshotter:     snapshotter,
+		registryHosts:   hostsProvider,
+		registryService: registry,
 	}
 }
 
