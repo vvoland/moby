@@ -51,6 +51,9 @@ func showProgress(ctx context.Context, ongoing *jobs, out progress.Output, updat
 					return
 				}
 			case <-ctx.Done():
+				// Don't use the context that is already done.
+				// Perform the last update with a new context.
+				ctx := context.Background()
 				updateFunc(ctx, ongoing, out, start)
 				return
 			}
