@@ -60,7 +60,7 @@ func (i *ImageService) PushImage(ctx context.Context, image, tag string, metaHea
 
 	jobs := newJobs()
 
-	resolver, tracker := newResolverFromAuthConfig(authConfig)
+	resolver, tracker := i.newResolverFromAuthConfig(authConfig)
 
 	imageHandler := containerdimages.HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) (subdescs []ocispec.Descriptor, err error) {
 		logrus.WithField("digest", desc.Digest.String()).

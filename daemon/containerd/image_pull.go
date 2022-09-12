@@ -46,7 +46,7 @@ func (i *ImageService) PullImage(ctx context.Context, image, tagOrDigest string,
 		}
 	}
 
-	resolver, _ := newResolverFromAuthConfig(authConfig)
+	resolver, _ := i.newResolverFromAuthConfig(authConfig)
 	opts = append(opts, containerd.WithResolver(resolver))
 
 	jobs := newJobs()
