@@ -68,7 +68,7 @@ func (i *ImageService) GetImage(ctx context.Context, refOrID string, options ima
 }
 
 func (i *ImageService) getImage(ctx context.Context, refOrID string) (containerd.Image, *image.Image, error) {
-	img, err := i.resolveImage(ctx, refOrID)
+	c8dImg, err := i.resolveImage(ctx, refOrID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -78,15 +78,15 @@ func (i *ImageService) getImage(ctx context.Context, refOrID string) (containerd
 	if err != nil {
 		return nil, nil, err
 	}
-	ii := containerd.NewImage(i.client, ctrdimg)
+	containerdImage := containerd.NewImage(i.client, ctrdimg)
 	provider := i.client.ContentStore()
-	conf, err := ctrdimg.Config(ctx, provider, ii.Platform())
+	conf, err := ctrdimg.Config(ctx, provider, containerdImage.Platform())
 	if err != nil {
 		return nil, nil, err
 	}
 
 	var ociimage ocispec.Image
-	imageConfigBytes, err := content.ReadBlob(ctx, ii.ContentStore(), conf)
+	imageConfigBytes, err := content.ReadBlob(ctx, containerdImage.ContentStore(), conf)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -95,7 +95,7 @@ func (i *ImageService) getImage(ctx context.Context, refOrID string) (containerd
 		return nil, nil, err
 	}
 
-	fs, err := ii.RootFS(ctx)
+	fs, err := containerdImage.RootFS(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -107,23 +107,25 @@ func (i *ImageService) getImage(ctx context.Context, refOrID string) (containerd
 	for k, v := range ociimage.Config.ExposedPorts {
 		exposedPorts[nat.Port(k)] = v
 	}
-	return ii, &image.Image{
-		V1Image: image.V1Image{
-			ID:           string(img.Target.Digest),
-			OS:           ociimage.OS,
-			Architecture: ociimage.Architecture,
-			Config: &containertypes.Config{
-				Entrypoint:   ociimage.Config.Entrypoint,
-				Env:          ociimage.Config.Env,
-				Cmd:          ociimage.Config.Cmd,
-				User:         ociimage.Config.User,
-				WorkingDir:   ociimage.Config.WorkingDir,
-				ExposedPorts: exposedPorts,
-				Volumes:      ociimage.Config.Volumes,
-			},
+
+	img := image.NewImage(image.IDFromDigest(c8dImg.Target.Digest))
+	img.V1Image = image.V1Image{
+		ID:           string(c8dImg.Target.Digest),
+		OS:           ociimage.OS,
+		Architecture: ociimage.Architecture,
+		Config: &containertypes.Config{
+			Entrypoint:   ociimage.Config.Entrypoint,
+			Env:          ociimage.Config.Env,
+			Cmd:          ociimage.Config.Cmd,
+			User:         ociimage.Config.User,
+			WorkingDir:   ociimage.Config.WorkingDir,
+			ExposedPorts: exposedPorts,
+			Volumes:      ociimage.Config.Volumes,
 		},
-		RootFS: rootfs,
-	}, nil
+	}
+	img.RootFS = rootfs
+
+	return containerdImage, img, nil
 }
 
 // resolveImage searches for an image based on the given
