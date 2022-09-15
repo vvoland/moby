@@ -3,24 +3,13 @@ package daemon // import "github.com/docker/docker/daemon"
 import (
 	"context"
 
-	"github.com/containerd/containerd/containers"
-	"github.com/containerd/containerd/oci"
 	coci "github.com/containerd/containerd/oci"
 	"github.com/containerd/containerd/pkg/apparmor"
 	"github.com/docker/docker/container"
+	"github.com/docker/docker/oci"
 	"github.com/docker/docker/oci/caps"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
-
-// withResetAdditionalGIDs resets additonal GIDs
-// This code is based  nerdctl, under Apache License
-// https://github.com/containerd/nerdctl/blob/2bbd998a1c95e6682120918d9a07a24ccef4f5fb/cmd/nerdctl/run_user.go#L69
-func withResetAdditionalGIDs() oci.SpecOpts {
-	return func(_ context.Context, _ oci.Client, _ *containers.Container, s *oci.Spec) error {
-		s.Process.User.AdditionalGids = nil
-		return nil
-	}
-}
 
 func (daemon *Daemon) execSetPlatformOpt(ctx context.Context, c *container.Container, ec *container.ExecConfig, p *specs.Process) error {
 	if len(ec.User) > 0 {
@@ -29,18 +18,18 @@ func (daemon *Daemon) execSetPlatformOpt(ctx context.Context, c *container.Conta
 			if err != nil {
 				return err
 			}
-			ci, err := cc.Info(ctx)
-			if err != nil {
-				return err
-			}
 			spec, err := cc.Spec(ctx)
 			if err != nil {
 				return err
 			}
-			opts := []oci.SpecOpts{
-				coci.WithUser(ec.User),
-				withResetAdditionalGIDs(),
-				coci.WithAdditionalGIDs(ec.User),
+			opts := []coci.SpecOpts{
+				oci.WithUser(ec.User),
+				oci.WithResetAdditionalGIDs(),
+				oci.WithAdditionalGIDs(ec.User),
+			}
+			ci, err := cc.Info(ctx)
+			if err != nil {
+				return err
 			}
 			for _, opt := range opts {
 				if err := opt(ctx, daemon.containerdCli, &ci, spec); err != nil {
