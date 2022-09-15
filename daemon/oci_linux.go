@@ -1034,7 +1034,7 @@ func (daemon *Daemon) createSpec(ctx context.Context, c *container.Container) (r
 			Path: "rootfs",
 		}
 		if c.Config.User != "" {
-			opts = append(opts, coci.WithUser(c.Config.User))
+			opts = append(opts, oci.WithUser(c.Config.User))
 		}
 		if c.Config.WorkingDir != "" {
 			opts = append(opts, coci.WithProcessCwd(c.Config.WorkingDir))
