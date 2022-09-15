@@ -2,6 +2,7 @@ package containerd
 
 import (
 	"context"
+	"strings"
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/mount"
@@ -40,7 +41,7 @@ func (i *ImageService) Changes(ctx context.Context, container *container.Contain
 	defer snapshotter.Remove(ctx, rnd.String())
 
 	var changes []archive.Change
-	err = mount.WithTempMount(ctx, mounts, func(fs string) error {
+	err = mount.WithTempMount(ctx, readOnly(mounts), func(fs string) error {
 		return mount.WithTempMount(ctx, parent, func(root string) error {
 			changes, err = archive.ChangesDirs(fs, root)
 			return err
@@ -48,4 +49,38 @@ func (i *ImageService) Changes(ctx context.Context, container *container.Contain
 		return err
 	})
 	return changes, err
+}
+
+func readOnly(mounts []mount.Mount) []mount.Mount {
+	for i, m := range mounts {
+		if m.Type == "overlay" {
+			opts := make([]string, 0, len(m.Options))
+			upper := ""
+			for _, o := range m.Options {
+				if strings.HasPrefix(o, "upperdir=") {
+					upper = strings.TrimPrefix(o, "upperdir=")
+				} else if !strings.HasPrefix(o, "workdir=") {
+					opts = append(opts, o)
+				}
+			}
+			if upper != "" {
+				for i, o := range opts {
+					if strings.HasPrefix(o, "lowerdir=") {
+						opts[i] = "lowerdir=" + upper + ":" + strings.TrimPrefix(o, "lowerdir=")
+					}
+				}
+			}
+			mounts[i].Options = opts
+			continue
+		}
+		opts := make([]string, 0, len(m.Options))
+		for _, opt := range m.Options {
+			if opt != "rw" {
+				opts = append(opts, opt)
+			}
+		}
+		opts = append(opts, "ro")
+		mounts[i].Options = opts
+	}
+	return mounts
 }
