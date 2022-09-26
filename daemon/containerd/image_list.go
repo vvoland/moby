@@ -90,9 +90,16 @@ func (i *ImageService) Images(ctx context.Context, opts types.ImageListOptions) 
 			return nil, err
 		}
 
+		ref, err := reference.ParseNormalizedNamed(img.Name())
+		if err != nil {
+			return nil, err
+		}
+
+		familiarName := reference.FamiliarString(ref)
+
 		ret = append(ret, &types.ImageSummary{
-			RepoDigests: []string{img.Name() + "@" + img.Target().Digest.String()}, // "hello-world@sha256:bfea6278a0a267fad2634554f4f0c6f31981eea41c553fdf5a83e95a41d40c38"},
-			RepoTags:    []string{img.Name()},
+			RepoDigests: []string{familiarName + "@" + img.Target().Digest.String()}, // "hello-world@sha256:bfea6278a0a267fad2634554f4f0c6f31981eea41c553fdf5a83e95a41d40c38"},
+			RepoTags:    []string{familiarName},
 			Containers:  -1,
 			ParentID:    "",
 			SharedSize:  -1,
