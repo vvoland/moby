@@ -93,20 +93,27 @@ func (i *ImageService) Images(ctx context.Context, opts types.ImageListOptions) 
 			return nil, err
 		}
 
+		ref, err := reference.ParseNormalizedNamed(img.Name())
+		if err != nil {
+			return nil, err
+		}
+
+		familiarName := reference.FamiliarString(ref)
+
 		summaries = append(summaries, &types.ImageSummary{
-			ParentID:    "",
+			RepoDigests: []string{familiarName + "@" + img.Target().Digest.String()}, // "hello-world@sha256:bfea6278a0a267fad2634554f4f0c6f31981eea41c553fdf5a83e95a41d40c38"},
+			RepoTags:    []string{familiarName},
 			ID:          img.Target().Digest.String(),
+			ParentID:    "",
 			Created:     img.Metadata().CreatedAt.Unix(),
-			RepoDigests: []string{img.Name() + "@" + img.Target().Digest.String()}, // "hello-world@sha256:bfea6278a0a267fad2634554f4f0c6f31981eea41c553fdf5a83e95a41d40c38"},
-			RepoTags:    []string{img.Name()},
 			Size:        size,
 			VirtualSize: virtualSize,
+			Containers:  -1,
 			// -1 indicates that the value has not been set (avoids ambiguity
 			// between 0 (default) and "not set". We cannot use a pointer (nil)
 			// for this, as the JSON representation uses "omitempty", which would
 			// consider both "0" and "nil" to be "empty".
 			SharedSize: -1,
-			Containers: -1,
 		})
 	}
 
