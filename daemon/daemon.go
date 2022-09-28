@@ -1020,7 +1020,11 @@ func NewDaemon(ctx context.Context, config *config.Config, pluginStore *plugin.S
 		if err := configureKernelSecuritySupport(config, driverName); err != nil {
 			return nil, err
 		}
-		d.imageService = ctrd.NewService(d.containerdCli, d.containers, driverName, d, d.registryService)
+		limits := ctrd.Limits{
+			MaxConcurrentDownloads: config.MaxConcurrentDownloads,
+			MaxConcurrentUploads:   config.MaxConcurrentUploads,
+		}
+		d.imageService = ctrd.NewService(d.containerdCli, limits, d.containers, driverName, d, d.registryService)
 	} else {
 		layerStore, err := layer.NewStoreFromOptions(layer.StoreOptions{
 			Root:                      config.Root,
@@ -1121,10 +1125,10 @@ func NewDaemon(ctx context.Context, config *config.Config, pluginStore *plugin.S
 		// if migration is called from daemon/images. layerStore might move as well.
 		d.imageService = images.NewImageService(imgSvcConfig)
 
-		logrus.Debugf("Max Concurrent Downloads: %d", imgSvcConfig.MaxConcurrentDownloads)
-		logrus.Debugf("Max Concurrent Uploads: %d", imgSvcConfig.MaxConcurrentUploads)
 		logrus.Debugf("Max Download Attempts: %d", imgSvcConfig.MaxDownloadAttempts)
 	}
+	logrus.Debugf("Max Concurrent Downloads: %d", config.MaxConcurrentDownloads)
+	logrus.Debugf("Max Concurrent Uploads: %d", config.MaxConcurrentUploads)
 
 	go d.execCommandGC()
 

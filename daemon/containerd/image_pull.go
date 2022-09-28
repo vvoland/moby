@@ -59,6 +59,11 @@ func (i *ImageService) PullImage(ctx context.Context, image, tagOrDigest string,
 	opts = append(opts, containerd.WithImageHandler(h))
 	opts = i.applySnapshotterOpts(opts, ref)
 
+	if i.limits.MaxConcurrentDownloads > 0 {
+		// TODO(vvoland): use the i.downloadLimiter directly
+		opts = append(opts, containerd.WithMaxConcurrentDownloads(i.limits.MaxConcurrentDownloads))
+	}
+
 	out := streamformatter.NewJSONProgressOutput(outStream, false)
 	finishProgress := showProgress(ctx, jobs, out, pullProgress(i.client.ContentStore(), true))
 	defer finishProgress()

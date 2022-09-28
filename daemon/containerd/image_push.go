@@ -15,7 +15,6 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/sync/semaphore"
 )
 
 // PushImage initiates a push operation on the repository named localName.
@@ -92,8 +91,7 @@ func (i *ImageService) PushImage(ctx context.Context, image, tag string, metaHea
 		}
 	}()
 
-	var limiter *semaphore.Weighted = nil // TODO: Respect max concurrent downloads/uploads
-	pusher := newLazyPusher(store, resolver, jobs, limiter, limiter)
+	pusher := newLazyPusher(store, resolver, jobs, i.downloadLimiter, i.uploadLimiter)
 
 	leasedCtx, release, err := i.client.WithLease(ctx)
 	if err != nil {

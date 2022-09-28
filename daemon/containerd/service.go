@@ -19,6 +19,7 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/identity"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/semaphore"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -31,6 +32,19 @@ type ImageService struct {
 	pruneRunning    int32
 	registryHosts   RegistryHostsProvider
 	registryService *registry.Service
+	limits          Limits
+	downloadLimiter *semaphore.Weighted
+	uploadLimiter   *semaphore.Weighted
+}
+
+type Limits struct {
+	// MaxConcurrentDownloads is the maximum number of downloads that
+	// may take place at a time for each pull.
+	MaxConcurrentDownloads int
+
+	// MaxConcurrentUploads is the maximum number of uploads that
+	// may take place at a time.
+	MaxConcurrentUploads int
 }
 
 type RegistryHostsProvider interface {
@@ -38,13 +52,16 @@ type RegistryHostsProvider interface {
 }
 
 // NewService creates a new ImageService.
-func NewService(c *containerd.Client, containers container.Store, snapshotter string, hostsProvider RegistryHostsProvider, registry *registry.Service) *ImageService {
+func NewService(c *containerd.Client, limits Limits, containers container.Store, snapshotter string, hostsProvider RegistryHostsProvider, registry *registry.Service) *ImageService {
 	return &ImageService{
 		client:          c,
 		containers:      containers,
+		limits:          limits,
 		snapshotter:     snapshotter,
 		registryHosts:   hostsProvider,
 		registryService: registry,
+		downloadLimiter: semaphore.NewWeighted(int64(limits.MaxConcurrentDownloads)),
+		uploadLimiter:   semaphore.NewWeighted(int64(limits.MaxConcurrentUploads)),
 	}
 }
 
