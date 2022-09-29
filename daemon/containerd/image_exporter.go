@@ -14,6 +14,7 @@ import (
 	"github.com/docker/distribution/reference"
 	"github.com/docker/docker/container"
 	"github.com/docker/docker/pkg/containerfs"
+	"github.com/google/uuid"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -135,7 +136,7 @@ func (i *ImageService) optForImageExport(ctx context.Context, name string) (arch
 
 		// Create a new manifest which contains only the manifests we have in store.
 		srcRef := ref.String()
-		targetRef := srcRef + "-tmp-export"
+		targetRef := srcRef + "-tmp-export" + uuid.NewString()
 		newImg, err := converter.Convert(ctx, i.client, targetRef, srcRef,
 			converter.WithPlatform(platforms.Any(presentPlatforms...)))
 		if err != nil {
