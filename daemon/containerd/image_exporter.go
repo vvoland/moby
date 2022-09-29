@@ -40,10 +40,15 @@ func (i *ImageService) ExportImage(ctx context.Context, names []string, outStrea
 	}
 
 	for _, imageRef := range names {
-		var err error
-		opts, err = i.appendImageForExport(ctx, opts, imageRef)
+		newOpt, tmpImage, err := i.optForImageExport(ctx, imageRef)
+		if tmpImage != nil {
+			defer i.client.ImageService().Delete(ctx, tmpImage.Name, containerdimages.SynchronousDelete())
+		}
 		if err != nil {
 			return err
+		}
+		if newOpt != nil {
+			opts = append(opts, newOpt)
 		}
 	}
 
@@ -87,17 +92,19 @@ func (i *ImageService) LoadImage(ctx context.Context, inTar io.ReadCloser, outSt
 	return nil
 }
 
-func (i *ImageService) appendImageForExport(ctx context.Context, opts []archive.ExportOpt, name string) ([]archive.ExportOpt, error) {
+// optForImageExport returns an archive.ExportOpt that should include the image
+// with the provided name in the output archive.
+func (i *ImageService) optForImageExport(ctx context.Context, name string) (archive.ExportOpt, *containerdimages.Image, error) {
 	ref, err := reference.ParseDockerRef(name)
 	if err != nil {
-		return opts, err
+		return nil, nil, err
 	}
 
 	is := i.client.ImageService()
 
 	img, err := is.Get(ctx, ref.String())
 	if err != nil {
-		return opts, err
+		return nil, nil, err
 	}
 
 	store := i.client.ContentStore()
@@ -105,7 +112,7 @@ func (i *ImageService) appendImageForExport(ctx context.Context, opts []archive.
 	if containerdimages.IsIndexType(img.Target.MediaType) {
 		children, err := containerdimages.Children(ctx, store, img.Target)
 		if err != nil {
-			return opts, err
+			return nil, nil, err
 		}
 
 		// Check which platform manifests we have blobs for.
@@ -119,7 +126,7 @@ func (i *ImageService) appendImageForExport(ctx context.Context, opts []archive.
 					logrus.WithField("digest", child.Digest.String()).Debug("missing blob, not exporting")
 					continue
 				} else if err != nil {
-					return opts, err
+					return nil, nil, err
 				}
 				presentPlatforms = append(presentPlatforms, *child.Platform)
 			}
@@ -127,7 +134,7 @@ func (i *ImageService) appendImageForExport(ctx context.Context, opts []archive.
 
 		// If we have all the manifests, just export the original index.
 		if len(missingPlatforms) == 0 {
-			return append(opts, archive.WithImage(is, img.Name)), nil
+			return archive.WithImage(is, img.Name), nil, nil
 		}
 
 		// Create a new manifest which contains only the manifests we have in store.
@@ -136,11 +143,10 @@ func (i *ImageService) appendImageForExport(ctx context.Context, opts []archive.
 		newImg, err := converter.Convert(ctx, i.client, targetRef, srcRef,
 			converter.WithPlatform(platforms.Any(presentPlatforms...)))
 		if err != nil {
-			return opts, err
+			return nil, newImg, err
 		}
-		defer i.client.ImageService().Delete(ctx, newImg.Name, containerdimages.SynchronousDelete())
-		return append(opts, archive.WithManifest(newImg.Target, srcRef)), nil
+		return archive.WithManifest(newImg.Target, srcRef), newImg, nil
 	}
 
-	return append(opts, archive.WithImage(is, img.Name)), nil
+	return archive.WithImage(is, img.Name), nil, nil
 }
