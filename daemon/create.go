@@ -177,6 +177,10 @@ func (daemon *Daemon) create(ctx context.Context, opts createOpts) (retC *contai
 	}
 
 	ctr.HostConfig.StorageOpt = opts.params.HostConfig.StorageOpt
+	ctr.Config.Platform = platforms.DefaultSpec()
+	if opts.params.Platform != nil {
+		ctr.Config.Platform = *opts.params.Platform
+	}
 
 	if daemon.UsesSnapshotter() {
 		c8dImge, err := daemon.imageService.(containerdImage).GetContainerdImage(ctx, opts.params.Config.Image, opts.params.Platform)
@@ -184,6 +188,21 @@ func (daemon *Daemon) create(ctx context.Context, opts createOpts) (retC *contai
 			return nil, err
 		}
 		ctrdimg := containerd.NewImage(daemon.containerdCli, c8dImge)
+		if opts.params.Platform != nil {
+			ctrdimg = containerd.NewImageWithPlatform(daemon.containerdCli, c8dImge, platforms.Only(*opts.params.Platform))
+		}
+
+		unpacked, err := ctrdimg.IsUnpacked(ctx, daemon.ImageService().StorageDriver())
+		if err != nil {
+			return nil, err
+		}
+		if !unpacked {
+			err := ctrdimg.Unpack(ctx, daemon.ImageService().StorageDriver())
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		diffIDs, err := ctrdimg.RootFS(ctx)
 		if err != nil {
 			return nil, err

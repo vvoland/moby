@@ -12,7 +12,7 @@ import (
 // TagImage creates the tag specified by newTag, pointing to the image named
 // imageName (alternatively, imageName can also be an image ID).
 func (i *ImageService) TagImage(ctx context.Context, imageName, repository, tag string) (string, error) {
-	img, err := i.resolveImage(ctx, imageName)
+	img, err := i.resolveImage(ctx, imageName, nil)
 	if err != nil {
 		return "", err
 	}
@@ -35,7 +35,7 @@ func (i *ImageService) TagImage(ctx context.Context, imageName, repository, tag 
 func (i *ImageService) TagImageWithReference(ctx context.Context, imageID image.ID, newTag reference.Named) error {
 	logrus.Infof("Tagging image %q with reference %q", imageID, newTag.String())
 
-	ci, _, err := i.getImage(ctx, imageID.String())
+	ci, _, err := i.getImage(ctx, imageID.String(), nil)
 	if err != nil {
 		return err
 	}
