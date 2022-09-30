@@ -14,7 +14,7 @@ import (
 // ImageHistory returns a slice of ImageHistory structures for the specified
 // image name by walking the image lineage.
 func (i *ImageService) ImageHistory(ctx context.Context, name string) ([]*imagetype.HistoryResponseItem, error) {
-	c8dimg, _, err := i.getImage(ctx, name)
+	c8dimg, _, err := i.getImage(ctx, name, nil)
 	if err != nil {
 		return nil, err
 	}

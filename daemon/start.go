@@ -6,12 +6,12 @@ import (
 	"time"
 
 	"github.com/containerd/containerd"
+	"github.com/containerd/containerd/platforms"
 	"github.com/docker/docker/api/types"
 	containertypes "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/container"
 	"github.com/docker/docker/errdefs"
 	"github.com/docker/docker/libcontainerd"
-	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -181,15 +181,19 @@ func (daemon *Daemon) containerStart(ctx context.Context, container *container.C
 
 	newContainerOpts := []containerd.NewContainerOpts{}
 	if daemon.UsesSnapshotter() {
-		newContainerOpts = append(newContainerOpts, containerd.WithSnapshotter(container.Driver))
-		newContainerOpts = append(newContainerOpts, containerd.WithSnapshot(container.ID))
-		c8dImge, err := daemon.imageService.(containerdImage).GetContainerdImage(ctx, container.Config.Image, &v1.Platform{})
+		c8dImge, err := daemon.imageService.(containerdImage).GetContainerdImage(ctx, container.Config.Image, &container.Config.Platform)
 		if err != nil {
 			return err
 		}
-		ctrdimg := containerd.NewImage(daemon.containerdCli, c8dImge)
-		newContainerOpts = append(newContainerOpts, containerd.WithImage(ctrdimg))
+
+		platformM := platforms.Only(container.Config.Platform)
+		newContainerOpts = append(newContainerOpts,
+			containerd.WithSnapshotter(container.Driver),
+			containerd.WithSnapshot(container.ID),
+			containerd.WithImage(containerd.NewImageWithPlatform(daemon.containerdCli, c8dImge, platformM)),
+		)
 	}
+
 	ctr, err := libcontainerd.ReplaceContainer(ctx, daemon.containerd, container.ID, spec, shim, createOptions, newContainerOpts...)
 	if err != nil {
 		return translateContainerdStartErr(container.Path, container.SetExitCode, err)
