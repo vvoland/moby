@@ -41,7 +41,7 @@ with adaptations to match the Moby data model and services.
 func (i *ImageService) CommitImage(ctx context.Context, cc backend.CommitConfig) (image.ID, error) {
 	container := i.containers.Get(cc.ContainerID)
 
-	cimg, _, err := i.getImage(ctx, container.Config.Image)
+	cimg, _, err := i.getImage(ctx, container.Config.Image, nil)
 	if err != nil {
 		return "", err
 	}

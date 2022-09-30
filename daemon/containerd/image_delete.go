@@ -46,7 +46,7 @@ import (
 // TODO(thaJeztah): add support for image delete using image (short)ID; see https://github.com/moby/moby/issues/43854
 // TODO(thaJeztah): mage delete should send image "untag" events and prometheus counters; see https://github.com/moby/moby/issues/43855
 func (i *ImageService) ImageDelete(ctx context.Context, imageRef string, force, prune bool) ([]types.ImageDeleteResponseItem, error) {
-	c8dImg, _, err := i.getImage(ctx, imageRef)
+	c8dImg, _, err := i.getImage(ctx, imageRef, nil)
 	if err != nil {
 		return nil, err
 	}
