@@ -6,11 +6,11 @@ import (
 	"time"
 
 	"github.com/containerd/containerd"
+	"github.com/containerd/containerd/platforms"
 	"github.com/docker/docker/api/types"
 	containertypes "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/container"
 	"github.com/docker/docker/errdefs"
-	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -187,15 +187,16 @@ func (daemon *Daemon) containerStart(ctx context.Context, container *container.C
 		if err == nil {
 			createContainer = false
 		} else {
-			c8dImge, err := daemon.imageService.(containerdImage).GetContainerdImage(ctx, container.Config.Image, &v1.Platform{})
+			c8dImge, err := daemon.imageService.(containerdImage).GetContainerdImage(ctx, container.Config.Image, &container.Config.Platform)
 			if err != nil {
 				return err
 			}
 
+			platformM := platforms.Only(container.Config.Platform)
 			newContainerOpts = append(newContainerOpts,
 				containerd.WithSnapshotter(container.Driver),
 				containerd.WithSnapshot(container.ID),
-				containerd.WithImage(containerd.NewImage(daemon.containerdCli, c8dImge)),
+				containerd.WithImage(containerd.NewImageWithPlatform(daemon.containerdCli, c8dImge, platformM)),
 			)
 		}
 	}

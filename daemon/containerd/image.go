@@ -10,6 +10,7 @@ import (
 	"github.com/containerd/containerd/content"
 	cerrdefs "github.com/containerd/containerd/errdefs"
 	containerdimages "github.com/containerd/containerd/images"
+	"github.com/containerd/containerd/platforms"
 	"github.com/docker/distribution/reference"
 	containertypes "github.com/docker/docker/api/types/container"
 	imagetype "github.com/docker/docker/api/types/image"
@@ -27,12 +28,12 @@ var shortID = regexp.MustCompile(`^([a-f0-9]{4,64})$`)
 // GetContainerdImage returns the containerd image corresponding to the image referred to by refOrID.
 // The platform parameter is currently ignored
 func (i *ImageService) GetContainerdImage(ctx context.Context, refOrID string, platform *ocispec.Platform) (img containerdimages.Image, err error) {
-	return i.resolveImage(ctx, refOrID)
+	return i.resolveImage(ctx, refOrID, platform)
 }
 
 // GetImage returns an image corresponding to the image referred to by refOrID.
 func (i *ImageService) GetImage(ctx context.Context, refOrID string, options imagetype.GetImageOpts) (*image.Image, error) {
-	ii, img, err := i.getImage(ctx, refOrID)
+	ii, img, err := i.getImage(ctx, refOrID, options.Platform)
 	if err != nil {
 		return nil, err
 	}
@@ -67,18 +68,21 @@ func (i *ImageService) GetImage(ctx context.Context, refOrID string, options ima
 	return img, err
 }
 
-func (i *ImageService) getImage(ctx context.Context, refOrID string) (containerd.Image, *image.Image, error) {
-	c8dImg, err := i.resolveImage(ctx, refOrID)
+func (i *ImageService) getImage(ctx context.Context, refOrID string, platform *ocispec.Platform) (containerd.Image, *image.Image, error) {
+	c8dImg, err := i.resolveImage(ctx, refOrID, platform)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	// TODO(rumpl): pass the platform
-	ctrdimg, err := i.GetContainerdImage(ctx, refOrID, nil)
+	ctrdimg, err := i.GetContainerdImage(ctx, refOrID, platform)
 	if err != nil {
 		return nil, nil, err
 	}
+
 	containerdImage := containerd.NewImage(i.client, ctrdimg)
+	if platform != nil {
+		containerdImage = containerd.NewImageWithPlatform(i.client, ctrdimg, platforms.OnlyStrict(*platform))
+	}
 	provider := i.client.ContentStore()
 	conf, err := ctrdimg.Config(ctx, provider, containerdImage.Platform())
 	if err != nil {
@@ -131,7 +135,7 @@ func (i *ImageService) getImage(ctx context.Context, refOrID string) (containerd
 // resolveImage searches for an image based on the given
 // reference or identifier. Returns the descriptor of
 // the image, could be manifest list, manifest, or config.
-func (i *ImageService) resolveImage(ctx context.Context, refOrID string) (img containerdimages.Image, err error) {
+func (i *ImageService) resolveImage(ctx context.Context, refOrID string, platform *ocispec.Platform) (img containerdimages.Image, err error) {
 	parsed, err := reference.ParseAnyReference(refOrID)
 	if err != nil {
 		return containerdimages.Image{}, errdefs.InvalidParameter(err)
@@ -197,7 +201,21 @@ func (i *ImageService) resolveImage(ctx context.Context, refOrID string) (img co
 		}
 		return containerdimages.Image{}, errdefs.NotFound(errors.New("id not found"))
 	}
+	if platform != nil {
+		cs := i.client.ContentStore()
+		imgPlatforms, err := containerdimages.Platforms(ctx, cs, img.Target)
+		if err != nil {
+			return img, err
+		}
 
+		comparer := platforms.Only(*platform)
+		for _, p := range imgPlatforms {
+			if comparer.Match(p) {
+				return img, nil
+			}
+		}
+		return img, errdefs.NotFound(errors.Errorf("platform %s not supported", platforms.Format(*platform)))
+	}
 	return img, nil
 }
 

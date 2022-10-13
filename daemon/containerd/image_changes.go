@@ -21,7 +21,7 @@ func (i *ImageService) Changes(ctx context.Context, container *container.Contain
 		return nil, uerr
 	}
 
-	cimg, _, uerr := i.getImage(ctx, container.Config.Image)
+	cimg, _, uerr := i.getImage(ctx, container.Config.Image, nil)
 	if uerr != nil {
 		return nil, uerr
 	}
