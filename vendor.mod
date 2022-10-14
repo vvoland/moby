@@ -40,7 +40,7 @@ require (
 	github.com/godbus/dbus/v5 v5.0.6
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/gddo v0.0.0-20190904175337-72a348e765d2
-	github.com/google/go-cmp v0.5.7
+	github.com/google/go-cmp v0.5.9
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.8.0
 	github.com/hashicorp/go-immutable-radix v1.3.1
@@ -75,7 +75,7 @@ require (
 	github.com/prometheus/client_golang v1.12.1
 	github.com/rootless-containers/rootlesskit v1.0.0
 	github.com/sirupsen/logrus v1.8.1
-	github.com/spf13/cobra v1.1.3
+	github.com/spf13/cobra v1.5.0
 	github.com/spf13/pflag v1.0.5
 	github.com/tonistiigi/fsutil v0.0.0-20220115021204-b19f7f9cb274
 	github.com/tonistiigi/go-archvariant v1.0.0
@@ -90,7 +90,7 @@ require (
 	golang.org/x/sys v0.0.0-20221006211917-84dc82d7e875
 	golang.org/x/time v0.0.0-20211116232009-f0f3c7e86c11
 	google.golang.org/genproto v0.0.0-20220502173005-c8bf987b8c21
-	google.golang.org/grpc v1.47.0
+	google.golang.org/grpc v1.49.0
 	gotest.tools/v3 v3.3.0
 )
 
@@ -144,6 +144,7 @@ require (
 	github.com/prometheus/procfs v0.7.3 // indirect
 	github.com/rexray/gocsi v1.2.2 // indirect
 	github.com/sean-/seed v0.0.0-20170313163322-e2103e2c3529 // indirect
+	github.com/stretchr/testify v1.8.0 // indirect
 	github.com/tinylib/msgp v1.1.0 // indirect
 	github.com/tonistiigi/go-actions-cache v0.0.0-20220404170428-0bdeb6e1eac7 // indirect
 	github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea // indirect
@@ -166,7 +167,6 @@ require (
 	golang.org/x/crypto v0.0.0-20220315160706-3147a52a75dd // indirect
 	golang.org/x/oauth2 v0.0.0-20210819190943-2bc19b11175f // indirect
 	golang.org/x/text v0.3.7 // indirect
-	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	google.golang.org/api v0.54.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/protobuf v1.28.0 // indirect
