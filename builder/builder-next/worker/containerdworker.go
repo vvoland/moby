@@ -4,11 +4,13 @@ import (
 	"context"
 
 	"github.com/containerd/containerd/content"
+	"github.com/docker/docker/builder/builder-next/exporter/containerimage"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/exporter"
+	buildkitContainerImage "github.com/moby/buildkit/exporter/containerimage"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
@@ -19,17 +21,29 @@ import (
 
 // ContainerdWorker is a local worker instance with dedicated snapshotter, cache, and so on.
 type ContainerdWorker struct {
-	baseWorker *base.Worker
+	baseWorker  *base.Worker
+	imageWriter *buildkitContainerImage.ImageWriter
 }
 
 // NewContainerdWorker instantiates a local worker
 func NewContainerdWorker(ctx context.Context, wo base.WorkerOpt) (*ContainerdWorker, error) {
+	iw, err := buildkitContainerImage.NewImageWriter(buildkitContainerImage.WriterOpt{
+		Snapshotter:  wo.Snapshotter,
+		ContentStore: wo.ContentStore,
+		Applier:      wo.Applier,
+		Differ:       wo.Differ,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	bw, err := base.NewWorker(ctx, wo)
 	if err != nil {
 		return nil, err
 	}
 	return &ContainerdWorker{
-		baseWorker: bw,
+		baseWorker:  bw,
+		imageWriter: iw,
 	}, nil
 }
 
@@ -86,8 +100,14 @@ func (w *ContainerdWorker) Prune(ctx context.Context, ch chan client.UsageInfo, 
 // Exporter returns exporter by name
 func (w *ContainerdWorker) Exporter(name string, sm *session.Manager) (exporter.Exporter, error) {
 	switch name {
-	case "moby":
-		return w.baseWorker.Exporter(client.ExporterImage, sm)
+	case "moby", client.ExporterImage:
+		return containerimage.New(containerimage.Opt{
+			Images:         w.baseWorker.WorkerOpt.ImageStore,
+			SessionManager: sm,
+			ImageWriter:    w.imageWriter,
+			RegistryHosts:  w.baseWorker.WorkerOpt.RegistryHosts,
+			LeaseManager:   w.baseWorker.WorkerOpt.LeaseManager,
+		})
 	default:
 		return w.baseWorker.Exporter(name, sm)
 	}
