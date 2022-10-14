@@ -284,8 +284,11 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 			if err != nil {
 				return nil, err
 			}
+			if req.ExporterAttrs == nil {
+				req.ExporterAttrs = make(map[string]string)
+			}
 
-			if req.ExporterAttrs != nil {
+			if req.ExporterAttrs["name"] != "" {
 				reposAndTags, err := sanitizeRepoAndTags(strings.Split(req.ExporterAttrs["name"], ","))
 				if err != nil {
 					return nil, err
@@ -296,7 +299,10 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 				}
 
 				req.ExporterAttrs["name"] = strings.Join(names, ",")
-				req.ExporterAttrs["unpack"] = "true"
+			}
+			req.ExporterAttrs["unpack"] = "true"
+			if _, has := req.ExporterAttrs["dangling-name-prefix"]; !has {
+				req.ExporterAttrs["dangling-name-prefix"] = "dangling"
 			}
 		} else {
 			exp, err = w.Exporter(req.Exporter, c.opt.SessionManager)
