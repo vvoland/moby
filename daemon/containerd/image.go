@@ -14,6 +14,7 @@ import (
 	"github.com/docker/distribution/reference"
 	containertypes "github.com/docker/docker/api/types/container"
 	imagetype "github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/builder/builder-next/exporter/containerimage"
 	"github.com/docker/docker/errdefs"
 	"github.com/docker/docker/image"
 	"github.com/docker/docker/layer"
@@ -234,4 +235,9 @@ func (i *ImageService) presentChildrenHandler() containerdimages.HandlerFunc {
 
 		return containerdimages.Children(ctx, store, desc)
 	}
+}
+
+func isDanglingImage(img containerd.Image) bool {
+	danglingName := containerimage.ImagePrefixDangling + "@" + img.Target().Digest.String()
+	return img.Name() == danglingName
 }

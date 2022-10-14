@@ -34,6 +34,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+const ImagePrefixDangling = "dangling"
+
 const (
 	keyImageName        = "name"
 	keyPush             = "push"
