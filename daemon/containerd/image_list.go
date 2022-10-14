@@ -98,11 +98,19 @@ func (i *ImageService) Images(ctx context.Context, opts types.ImageListOptions) 
 			return nil, err
 		}
 
-		familiarName := reference.FamiliarString(ref)
+		var repoDigests, repoTags []string
+		if isDanglingImage(img) {
+			repoTags = []string{"<none>:<none>"}
+			repoDigests = []string{"<none>@<none>"}
+		} else {
+			familiarName := reference.FamiliarString(ref)
+			repoTags = []string{familiarName}
+			repoDigests = []string{familiarName + "@" + img.Target().Digest.String()} // "hello-world@sha256:bfea6278a0a267fad2634554f4f0c6f31981eea41c553fdf5a83e95a41d40c38"
+		}
 
 		summaries = append(summaries, &types.ImageSummary{
-			RepoDigests: []string{familiarName + "@" + img.Target().Digest.String()}, // "hello-world@sha256:bfea6278a0a267fad2634554f4f0c6f31981eea41c553fdf5a83e95a41d40c38"},
-			RepoTags:    []string{familiarName},
+			RepoDigests: repoDigests,
+			RepoTags:    repoTags,
 			ID:          img.Target().Digest.String(),
 			ParentID:    "",
 			Created:     img.Metadata().CreatedAt.Unix(),
