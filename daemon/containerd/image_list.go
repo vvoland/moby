@@ -18,7 +18,7 @@ var acceptedImageFilterTags = map[string]bool{
 	"label":     true,
 	"before":    true,
 	"since":     true,
-	"reference": false, // TODO(thaJeztah): implement "reference" filter: see https://github.com/moby/moby/issues/43847
+	"reference": true,
 }
 
 // Images returns a filtered list of images.
@@ -33,12 +33,12 @@ func (i *ImageService) Images(ctx context.Context, opts types.ImageListOptions) 
 		return nil, err
 	}
 
-	filter, err := i.setupFilters(ctx, opts.Filters)
+	filters, filterFn, err := i.setupFilters(ctx, opts.Filters)
 	if err != nil {
 		return nil, err
 	}
 
-	imgs, err := i.client.ListImages(ctx)
+	imgs, err := i.client.ListImages(ctx, filters...)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +67,7 @@ func (i *ImageService) Images(ctx context.Context, opts types.ImageListOptions) 
 		layers = make(map[digest.Digest]int)
 	}
 	for n, img := range imgs {
-		if !filter(img) {
+		if !filterFn(img) {
 			continue
 		}
 
@@ -135,8 +135,11 @@ type imageFilterFunc func(image containerd.Image) bool
 // setupFilters constructs an imageFilterFunc from the given imageFilters.
 //
 // TODO(thaJeztah): reimplement filters using containerd filters: see https://github.com/moby/moby/issues/43845
-func (i *ImageService) setupFilters(ctx context.Context, imageFilters filters.Args) (imageFilterFunc, error) {
-	var fltrs []imageFilterFunc
+func (i *ImageService) setupFilters(ctx context.Context, imageFilters filters.Args) ([]string, imageFilterFunc, error) {
+	var (
+		filters []string
+		fltrs   []imageFilterFunc
+	)
 	err := imageFilters.WalkValues("before", func(value string) error {
 		ref, err := reference.ParseDockerRef(value)
 		if err != nil {
@@ -153,7 +156,7 @@ func (i *ImageService) setupFilters(ctx context.Context, imageFilters filters.Ar
 		return err
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	err = imageFilters.WalkValues("since", func(value string) error {
@@ -172,7 +175,7 @@ func (i *ImageService) setupFilters(ctx context.Context, imageFilters filters.Ar
 		return err
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	err = imageFilters.WalkValues("until", func(value string) error {
@@ -193,21 +196,28 @@ func (i *ImageService) setupFilters(ctx context.Context, imageFilters filters.Ar
 		return err
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if imageFilters.Contains("label") {
-		fltrs = append(fltrs, func(image containerd.Image) bool {
-			return imageFilters.MatchKVList("label", image.Labels())
-		})
-	}
-	if imageFilters.Contains("label!") {
-		fltrs = append(fltrs, func(image containerd.Image) bool {
-			return !imageFilters.MatchKVList("label!", image.Labels())
-		})
+		for _, l := range imageFilters.Get("label") {
+			filters = append(filters, "label=="+l)
+		}
 	}
 
-	return func(image containerd.Image) bool {
+	if imageFilters.Contains("label!") {
+		for _, l := range imageFilters.Get("label!") {
+			filters = append(filters, "label!="+l)
+		}
+	}
+
+	if imageFilters.Contains("reference") {
+		for _, ref := range imageFilters.Get("reference") {
+			filters = append(filters, "name~="+ref)
+		}
+	}
+
+	return filters, func(image containerd.Image) bool {
 		for _, filter := range fltrs {
 			if !filter(image) {
 				return false
