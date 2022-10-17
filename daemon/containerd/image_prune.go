@@ -49,13 +49,13 @@ func (i *ImageService) ImagesPrune(ctx context.Context, pruneFilters filters.Arg
 		}
 	}
 
-	filterFunc, err := i.setupFilters(ctx, pruneFilters)
+	filters, filterFunc, err := i.setupFilters(ctx, pruneFilters)
 	if err != nil {
 		return nil, err
 	}
 
 	if !danglingOnly {
-		r, errs := i.pruneUnused(ctx, filterFunc)
+		r, errs := i.pruneUnused(ctx, filterFunc, filters)
 		if len(errs) > 0 {
 			return &r, combineErrors(errs)
 		}
@@ -77,12 +77,12 @@ func (i *ImageService) ImagesPrune(ctx context.Context, pruneFilters filters.Arg
 	}
 }
 
-func (i *ImageService) pruneUnused(ctx context.Context, filterFunc imageFilterFunc) (types.ImagesPruneReport, []error) {
+func (i *ImageService) pruneUnused(ctx context.Context, filterFunc imageFilterFunc, filters []string) (types.ImagesPruneReport, []error) {
 	report := types.ImagesPruneReport{}
 	is := i.client.ImageService()
 	store := i.client.ContentStore()
 
-	allImages, err := i.client.ListImages(ctx)
+	allImages, err := i.client.ListImages(ctx, filters...)
 	if err != nil {
 		return report, []error{err}
 	}
