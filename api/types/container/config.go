@@ -84,7 +84,7 @@ type Config struct {
 	Healthcheck     *HealthConfig       `json:",omitempty"` // Healthcheck describes how to check the container is healthy
 	ArgsEscaped     bool                `json:",omitempty"` // True if command is already escaped (meaning treat as a command line) (Windows specific).
 	Image           string              // Name of the image as it was passed by the operator (e.g. could be symbolic)
-	Platform        v1.Platform         `json:"-"`
+	Platform        v1.Platform         `json:",omitempty"`
 	Volumes         map[string]struct{} // List of volumes (mounts) used for the container
 	WorkingDir      string              // Current directory (PWD) in the command will be launched
 	Entrypoint      strslice.StrSlice   // Entrypoint to run when starting the container
