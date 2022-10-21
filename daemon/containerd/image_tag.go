@@ -49,5 +49,14 @@ func (i *ImageService) TagImageWithReference(ctx context.Context, imageID image.
 	is := i.client.ImageService()
 	_, err = is.Create(ctx, img)
 
+	if err == nil {
+		if isDanglingImage(ci) {
+			delErr := is.Delete(ctx, ci.Name())
+			if delErr != nil {
+				logrus.WithField("name", ci.Name()).Debug("failed to remove dangling image")
+			}
+		}
+	}
+
 	return err
 }
