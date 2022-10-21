@@ -8,7 +8,6 @@ import (
 	"github.com/containerd/containerd"
 	cerrdefs "github.com/containerd/containerd/errdefs"
 	containerdimages "github.com/containerd/containerd/images"
-	"github.com/containerd/containerd/leases"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/errdefs"
@@ -54,27 +53,19 @@ func (i *ImageService) ImagesPrune(ctx context.Context, pruneFilters filters.Arg
 		return nil, err
 	}
 
-	if !danglingOnly {
-		r, errs := i.pruneUnused(ctx, filterFunc, filters)
-		if len(errs) > 0 {
-			return &r, combineErrors(errs)
+	if danglingOnly {
+		orgFilterFunc := filterFunc
+		filterFunc = func(image containerd.Image) bool {
+			return orgFilterFunc(image) && isDanglingImage(image)
 		}
-
-		return &r, nil
-	} else {
-		// In containerd dangling content is automatically deleted by the GC.
-		// So running prune with dangling=true is mostly a no-op, unless there
-		// was some action performed which didn't invoke the GC immediately.
-		report := types.ImagesPruneReport{}
-		// Trigger GC.
-		ls := i.client.LeasesService()
-		lease, err := ls.Create(ctx)
-		if err != nil {
-			return &report, err
-		}
-		err = ls.Delete(ctx, lease, leases.SynchronousDelete)
-		return &report, err
 	}
+
+	r, errs := i.pruneUnused(ctx, filterFunc, filters)
+	if len(errs) > 0 {
+		return &r, combineErrors(errs)
+	}
+
+	return &r, nil
 }
 
 func (i *ImageService) pruneUnused(ctx context.Context, filterFunc imageFilterFunc, filters []string) (types.ImagesPruneReport, []error) {
