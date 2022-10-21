@@ -22,7 +22,7 @@ func (i *ImageService) Mount(ctx context.Context, container *container.Container
 	}
 	logrus.WithField("container", container.ID).Debugf("container mounted via layerStore: %v", dir)
 
-	if container.BaseFS != dir {
+	if container.BaseFS != "" && container.BaseFS != dir {
 		// The mount path reported by the graph driver should always be trusted on Windows, since the
 		// volume path for a given mounted layer may change over time.  This should only be an error
 		// on non-Windows operating systems.
@@ -45,7 +45,6 @@ func (i *ImageService) Unmount(ctx context.Context, container *container.Contain
 		logrus.WithField("container", container.ID).WithError(err).Error("error unmounting container")
 		return err
 	}
-	container.BaseFS = ""
 
 	return nil
 }
