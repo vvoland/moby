@@ -462,7 +462,7 @@ func TestRunWithBuildArgs(t *testing.T) {
 	mockBackend.makeImageCacheFunc = func(_ []string) builder.ImageCache {
 		return imageCache
 	}
-	b.imageProber = newImageProber(nil, mockBackend, nil, false)
+	b.imageProber = newImageProber(context.TODO(), mockBackend, nil, false)
 	mockBackend.getImageFunc = func(_ string) (builder.Image, builder.ROLayer, error) {
 		return &mockImage{
 			id:     "abcdef",
@@ -528,7 +528,7 @@ func TestRunIgnoresHealthcheck(t *testing.T) {
 	mockBackend.makeImageCacheFunc = func(_ []string) builder.ImageCache {
 		return imageCache
 	}
-	b.imageProber = newImageProber(nil, mockBackend, nil, false)
+	b.imageProber = newImageProber(context.TODO(), mockBackend, nil, false)
 	mockBackend.getImageFunc = func(_ string) (builder.Image, builder.ROLayer, error) {
 		return &mockImage{
 			id:     "abcdef",

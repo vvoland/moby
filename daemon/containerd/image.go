@@ -157,7 +157,7 @@ func (i *ImageService) resolveImage(ctx context.Context, refOrID string, platfor
 		return imgs[0], nil
 	}
 
-	namedRef, ok := parsed.(reference.Named)
+	namedRef := parsed.(reference.Named)
 	namedRef = reference.TagNameOnly(namedRef)
 
 	// If the identifier could be a short ID, attempt to match
