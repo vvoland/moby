@@ -69,6 +69,9 @@ func (i *ImageService) CommitImage(ctx context.Context, cc backend.CommitConfig)
 
 	target := baseImg.Target()
 	b, err := content.ReadBlob(ctx, contentStore, target)
+	if err != nil {
+		return "", err
+	}
 	var ocimanifest ocispec.Manifest
 	if err := json.Unmarshal(b, &ocimanifest); err != nil {
 		return "", err
