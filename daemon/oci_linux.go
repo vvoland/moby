@@ -735,9 +735,8 @@ func WithCommonOptions(daemon *Daemon, c *container.Container) coci.SpecOpts {
 			if err := c.SetupWorkingDirectory(daemon.idMapping.RootPair()); err != nil {
 				return err
 			}
-		} else {
-
 		}
+
 		cwd := c.Config.WorkingDir
 		if len(cwd) == 0 {
 			cwd = "/"
