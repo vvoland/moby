@@ -108,7 +108,6 @@ func (w *ContainerdWorker) Exporter(name string, sm *session.Manager) (exporter.
 			RegistryHosts:  w.baseWorker.WorkerOpt.RegistryHosts,
 			LeaseManager:   w.baseWorker.WorkerOpt.LeaseManager,
 		})
-		return w.baseWorker.Exporter(client.ExporterImage, sm)
 	default:
 		return w.baseWorker.Exporter(name, sm)
 	}
