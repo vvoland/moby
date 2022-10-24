@@ -13,8 +13,9 @@ import (
 
 	"github.com/containerd/containerd/containers"
 	"github.com/containerd/containerd/mount"
-	coci "github.com/containerd/containerd/oci"
 	"github.com/containerd/continuity/fs"
+
+	coci "github.com/containerd/containerd/oci"
 	libcontainer "github.com/opencontainers/runc/libcontainer/user"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
@@ -87,7 +88,7 @@ func AppendDevicePermissionsFromCgroupRules(devPermissions []specs.LinuxDeviceCg
 	return devPermissions, nil
 }
 
-// WithResetAdditionalGIDs resets additonal GIDs
+// WithResetAdditionalGIDs resets additional GIDs
 // This code is based  nerdctl, under Apache License
 // https://github.com/containerd/nerdctl/blob/2bbd998a1c95e6682120918d9a07a24ccef4f5fb/cmd/nerdctl/run_user.go#L69
 func WithResetAdditionalGIDs() coci.SpecOpts {
@@ -277,7 +278,7 @@ func withUsername(username string) coci.SpecOpts {
 
 // WithUser sets the user to be used within the container.
 // It accepts a valid user string in OCI Image Spec v1.0.0:
-//   user, uid, user:group, uid:gid, uid:group, user:gid
+// user, uid, user:group, uid:gid, uid:group, user:gid
 func WithUser(userstr string) coci.SpecOpts {
 	return func(ctx context.Context, client coci.Client, c *containers.Container, s *coci.Spec) error {
 		// For LCOW it's a bit harder to confirm that the user actually exists on the host as a rootfs isn't
