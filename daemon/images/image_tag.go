@@ -26,7 +26,7 @@ func (i *ImageService) TagImage(ctx context.Context, imageName, repository, tag 
 		}
 	}
 
-	err = i.TagImageWithReference(nil, img.ID(), newTag)
+	err = i.TagImageWithReference(ctx, img.ID(), newTag)
 	return reference.FamiliarString(newTag), err
 }
 
