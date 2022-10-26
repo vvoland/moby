@@ -199,8 +199,12 @@ func (daemon *Daemon) containerStart(ctx context.Context, container *container.C
 		return translateContainerdStartErr(container.Path, container.SetExitCode, err)
 	}
 
+	// Passing ctx to ctr.Start caused integration tests
+	// to be stuck in the cleanup phase
+	ctrCtx := context.TODO()
+
 	// TODO(mlaventure): we need to specify checkpoint options here
-	tsk, err := ctr.Start(ctx, checkpointDir,
+	tsk, err := ctr.Start(ctrCtx, checkpointDir,
 		container.StreamConfig.Stdin() != nil || container.Config.Tty,
 		container.InitializeStdio)
 	if err != nil {
