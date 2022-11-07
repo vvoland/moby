@@ -14,7 +14,7 @@ import (
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/diff"
-	cderrdefs "github.com/containerd/containerd/errdefs"
+	cerrdefs "github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/platforms"
@@ -106,7 +106,7 @@ func (i *ImageService) CommitImage(ctx context.Context, cc backend.CommitConfig)
 	}
 
 	if _, err := i.client.ImageService().Update(ctx, img); err != nil {
-		if !errdefs.IsNotFound(err) {
+		if !cerrdefs.IsNotFound(err) {
 			return "", err
 		}
 
@@ -280,7 +280,7 @@ func applyDiffLayer(ctx context.Context, name string, baseImg ocispec.Image, sn 
 	}
 
 	if err = sn.Commit(ctx, name, key); err != nil {
-		if cderrdefs.IsAlreadyExists(err) {
+		if cerrdefs.IsAlreadyExists(err) {
 			return nil
 		}
 		return err
