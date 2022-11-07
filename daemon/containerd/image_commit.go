@@ -199,6 +199,8 @@ func writeContentsForImage(ctx context.Context, snName string, baseImg container
 		Size:      int64(len(newMfstJSON)),
 	}
 
+	cs := baseImg.ContentStore()
+
 	// new manifest should reference the layers and config content
 	labels := map[string]string{
 		"containerd.io/gc.ref.content.0": configDesc.Digest.String(),
@@ -207,7 +209,7 @@ func writeContentsForImage(ctx context.Context, snName string, baseImg container
 		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", i+1)] = l.Digest.String()
 	}
 
-	err = content.WriteBlob(ctx, baseImg.ContentStore(), newMfstDesc.Digest.String(), bytes.NewReader(newMfstJSON), newMfstDesc, content.WithLabels(labels))
+	err = content.WriteBlob(ctx, cs, newMfstDesc.Digest.String(), bytes.NewReader(newMfstJSON), newMfstDesc, content.WithLabels(labels))
 	if err != nil {
 		return ocispec.Descriptor{}, "", err
 	}
@@ -216,7 +218,7 @@ func writeContentsForImage(ctx context.Context, snName string, baseImg container
 	labelOpt := content.WithLabels(map[string]string{
 		fmt.Sprintf("containerd.io/gc.ref.snapshot.%s", snName): identity.ChainID(newConfig.RootFS.DiffIDs).String(),
 	})
-	err = content.WriteBlob(ctx, baseImg.ContentStore(), configDesc.Digest.String(), bytes.NewReader(newConfigJSON), configDesc, labelOpt)
+	err = content.WriteBlob(ctx, cs, configDesc.Digest.String(), bytes.NewReader(newConfigJSON), configDesc, labelOpt)
 	if err != nil {
 		return ocispec.Descriptor{}, "", err
 	}
