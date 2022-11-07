@@ -41,39 +41,27 @@ with adaptations to match the Moby data model and services.
 func (i *ImageService) CommitImage(ctx context.Context, cc backend.CommitConfig) (image.ID, error) {
 	container := i.containers.Get(cc.ContainerID)
 
-	cimg, _, err := i.getImage(ctx, container.Config.Image, nil)
+	baseImg, _, err := i.getImage(ctx, container.Config.Image, nil)
 	if err != nil {
 		return "", err
 	}
+	target := baseImg.Target()
 
-	baseImgWithoutPlatform, err := i.client.ImageService().Get(ctx, cimg.Name())
-	if err != nil {
-		return "", err
-	}
-
-	baseImg := containerd.NewImageWithPlatform(i.client, baseImgWithoutPlatform, platforms.DefaultStrict())
+	platform := platforms.OnlyStrict(cc.ContainerConfig.Platform)
 
 	contentStore := baseImg.ContentStore()
-	conf, err := baseImg.Config(ctx)
+
+	ocimanifest, err := images.Manifest(ctx, contentStore, target, platform)
 	if err != nil {
 		return "", err
 	}
-	imageConfigBytes, err := content.ReadBlob(ctx, baseImg.ContentStore(), conf)
+
+	imageConfigBytes, err := content.ReadBlob(ctx, baseImg.ContentStore(), ocimanifest.Config)
 	if err != nil {
 		return "", err
 	}
 	var ociimage ocispec.Image
 	if err := json.Unmarshal(imageConfigBytes, &ociimage); err != nil {
-		return "", err
-	}
-
-	target := baseImg.Target()
-	b, err := content.ReadBlob(ctx, contentStore, target)
-	if err != nil {
-		return "", err
-	}
-	var ocimanifest ocispec.Manifest
-	if err := json.Unmarshal(b, &ocimanifest); err != nil {
 		return "", err
 	}
 
