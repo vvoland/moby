@@ -16,6 +16,7 @@ on:
 
 env:
   BUNDLES_OUTPUT: ./bundles
+  TEST_INTEGRATION_USE_SNAPSHOTTER: 1
 
 jobs:
   validate-dco:
