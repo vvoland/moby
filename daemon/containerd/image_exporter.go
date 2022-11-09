@@ -96,18 +96,17 @@ func (i *ImageService) LoadImage(ctx context.Context, inTar io.ReadCloser, outSt
 // optForImageExport returns an archive.ExportOpt that should include the image
 // with the provided name in the output archive.
 func (i *ImageService) optForImageExport(ctx context.Context, name string) (archive.ExportOpt, *containerdimages.Image, error) {
-	ref, err := reference.ParseDockerRef(name)
+	img, err := i.resolveImage(ctx, name, nil)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "failed to resolve image")
+	}
+
+	ref, err := reference.ParseNamed(img.Name)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to parse image reference")
 	}
 
 	is := i.client.ImageService()
-
-	img, err := is.Get(ctx, ref.String())
-	if err != nil {
-		return nil, nil, err
-	}
-
 	store := i.client.ContentStore()
 
 	if containerdimages.IsIndexType(img.Target.MediaType) {
