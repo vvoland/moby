@@ -14,6 +14,7 @@ import (
 	"github.com/docker/distribution/reference"
 	"github.com/docker/docker/container"
 	"github.com/google/uuid"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -38,6 +39,19 @@ func (i *ImageService) PerformWithBaseFS(ctx context.Context, c *container.Conta
 func (i *ImageService) ExportImage(ctx context.Context, names []string, outStream io.Writer) error {
 	opts := []archive.ExportOpt{
 		archive.WithSkipNonDistributableBlobs(),
+
+		// This makes the exported archive also include `manifest.json`
+		// when the image is a manifest list. It is needed for backwards
+		// compatibility with Docker image format.
+		// The containerd will choose only one manifest for the `manifest.json`.
+		// Our preference is to have it point to the default platform.
+		// Example:
+		//  Daemon is running on linux/arm64
+		//  When we export linux/amd64 and linux/arm64, manifest.json will point to linux/arm64.
+		//  When we export linux/amd64 only, manifest.json will point to linux/amd64.
+		// Note: This is only applicable if importing this archive into non-containerd Docker.
+		// Importing the same archive into containerd, will not restrict the platforms.
+		archive.WithPlatform(allPlatformsWithPreference(platforms.Default())),
 	}
 
 	for _, imageRef := range names {
@@ -149,4 +163,24 @@ func (i *ImageService) optForImageExport(ctx context.Context, name string) (arch
 	}
 
 	return archive.WithImage(is, img.Name), nil, nil
+}
+
+// allPlatformsWithPreference will match all platforms but will order
+// platforms matching the preferred matcher first.
+type allPlatformsWithPreferenceMatcher struct {
+	preferred platforms.MatchComparer
+}
+
+func allPlatformsWithPreference(preferred platforms.MatchComparer) platforms.MatchComparer {
+	return allPlatformsWithPreferenceMatcher{
+		preferred: preferred,
+	}
+}
+
+func (c allPlatformsWithPreferenceMatcher) Match(_ ocispec.Platform) bool {
+	return true
+}
+
+func (c allPlatformsWithPreferenceMatcher) Less(p1, p2 ocispec.Platform) bool {
+	return c.preferred.Less(p1, p2)
 }
