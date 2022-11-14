@@ -9,6 +9,7 @@ import (
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/content"
 	cerrdefs "github.com/containerd/containerd/errdefs"
+	"github.com/containerd/containerd/images"
 	containerdimages "github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/platforms"
 	"github.com/docker/distribution/reference"
@@ -237,8 +238,8 @@ func (i *ImageService) presentChildrenHandler() containerdimages.HandlerFunc {
 	}
 }
 
-func isDanglingImage(img containerd.Image) bool {
-	return img.Name() == danglingImageName(img.Target().Digest)
+func isDanglingImage(img images.Image) bool {
+	return img.Name == danglingImageName(img.Target.Digest)
 }
 
 func danglingImageName(digest digest.Digest) string {

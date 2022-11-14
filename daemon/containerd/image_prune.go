@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"github.com/containerd/containerd"
 	cerrdefs "github.com/containerd/containerd/errdefs"
+	"github.com/containerd/containerd/images"
 	containerdimages "github.com/containerd/containerd/images"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
@@ -55,7 +55,7 @@ func (i *ImageService) ImagesPrune(ctx context.Context, pruneFilters filters.Arg
 
 	if danglingOnly {
 		orgFilterFunc := filterFunc
-		filterFunc = func(image containerd.Image) bool {
+		filterFunc = func(image images.Image) bool {
 			return orgFilterFunc(image) && isDanglingImage(image)
 		}
 	}
@@ -73,14 +73,14 @@ func (i *ImageService) pruneUnused(ctx context.Context, filterFunc imageFilterFu
 	is := i.client.ImageService()
 	store := i.client.ContentStore()
 
-	allImages, err := i.client.ListImages(ctx, filters...)
+	allImages, err := i.client.ImageService().List(ctx, filters...)
 	if err != nil {
 		return report, []error{err}
 	}
 
-	imagesToPrune := map[string]containerd.Image{}
+	imagesToPrune := map[string]images.Image{}
 	for _, img := range allImages {
-		imagesToPrune[img.Name()] = img
+		imagesToPrune[img.Name] = img
 	}
 
 	errs := []error{}
@@ -119,13 +119,13 @@ func (i *ImageService) pruneUnused(ctx context.Context, filterFunc imageFilterFu
 				blobs = append(blobs, desc)
 				return nil, nil
 			}),
-		), img.Target())
+		), img.Target)
 
 		if err != nil {
 			errs = append(errs, err)
 			continue
 		}
-		err = is.Delete(ctx, img.Name(), containerdimages.SynchronousDelete())
+		err = is.Delete(ctx, img.Name, containerdimages.SynchronousDelete())
 		if err != nil && !cerrdefs.IsNotFound(err) {
 			errs = append(errs, err)
 			continue
@@ -133,7 +133,7 @@ func (i *ImageService) pruneUnused(ctx context.Context, filterFunc imageFilterFu
 
 		report.ImagesDeleted = append(report.ImagesDeleted,
 			types.ImageDeleteResponseItem{
-				Untagged: img.Name(),
+				Untagged: img.Name,
 			},
 		)
 

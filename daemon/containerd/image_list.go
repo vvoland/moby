@@ -5,12 +5,17 @@ import (
 	"time"
 
 	"github.com/containerd/containerd"
+	"github.com/containerd/containerd/content"
+	cerrdefs "github.com/containerd/containerd/errdefs"
+	"github.com/containerd/containerd/images"
+	c8dplatforms "github.com/containerd/containerd/platforms"
 	"github.com/docker/distribution/reference"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
 	timetypes "github.com/docker/docker/api/types/time"
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/identity"
+	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 var acceptedImageFilterTags = map[string]bool{
@@ -38,7 +43,7 @@ func (i *ImageService) Images(ctx context.Context, opts types.ImageListOptions) 
 		return nil, err
 	}
 
-	imgs, err := i.client.ListImages(ctx, filters...)
+	imgs, err := i.client.ImageService().List(ctx, filters...)
 	if err != nil {
 		return nil, err
 	}
@@ -63,66 +68,39 @@ func (i *ImageService) Images(ctx context.Context, opts types.ImageListOptions) 
 		layers    map[digest.Digest]int
 	)
 	if opts.SharedSize {
-		root = make([]*[]digest.Digest, len(imgs))
+		root = make([]*[]digest.Digest, 0, len(imgs))
 		layers = make(map[digest.Digest]int)
 	}
-	for n, img := range imgs {
+
+	contentStore := i.client.ContentStore()
+	for _, img := range imgs {
 		if !filterFn(img) {
 			continue
 		}
 
-		diffIDs, err := img.RootFS(ctx)
+		platforms, err := images.Platforms(ctx, contentStore, img.Target)
 		if err != nil {
 			return nil, err
 		}
-		chainIDs := identity.ChainIDs(diffIDs)
-		if opts.SharedSize {
-			root[n] = &chainIDs
-			for _, id := range chainIDs {
-				layers[id] = layers[id] + 1
+
+		for _, platform := range platforms {
+			image, chainIDs, err := i.singlePlatformImage(ctx, contentStore, img, platform)
+			if err != nil {
+				return nil, err
+			}
+			if image == nil {
+				continue
+			}
+
+			summaries = append(summaries, image)
+
+			if opts.SharedSize {
+				root = append(root, &chainIDs)
+				for _, id := range chainIDs {
+					layers[id] = layers[id] + 1
+				}
 			}
 		}
-
-		size, err := img.Size(ctx)
-		if err != nil {
-			return nil, err
-		}
-
-		virtualSize, err := computeVirtualSize(chainIDs, snapshotSizeFn)
-		if err != nil {
-			return nil, err
-		}
-
-		ref, err := reference.ParseNormalizedNamed(img.Name())
-		if err != nil {
-			return nil, err
-		}
-
-		var repoDigests, repoTags []string
-		if isDanglingImage(img) {
-			repoTags = []string{"<none>:<none>"}
-			repoDigests = []string{"<none>@<none>"}
-		} else {
-			familiarName := reference.FamiliarString(ref)
-			repoTags = []string{familiarName}
-			repoDigests = []string{familiarName + "@" + img.Target().Digest.String()} // "hello-world@sha256:bfea6278a0a267fad2634554f4f0c6f31981eea41c553fdf5a83e95a41d40c38"
-		}
-
-		summaries = append(summaries, &types.ImageSummary{
-			RepoDigests: repoDigests,
-			RepoTags:    repoTags,
-			ID:          img.Target().Digest.String(),
-			ParentID:    "",
-			Created:     img.Metadata().CreatedAt.Unix(),
-			Size:        size,
-			VirtualSize: virtualSize,
-			Containers:  -1,
-			// -1 indicates that the value has not been set (avoids ambiguity
-			// between 0 (default) and "not set". We cannot use a pointer (nil)
-			// for this, as the JSON representation uses "omitempty", which would
-			// consider both "0" and "nil" to be "empty".
-			SharedSize: -1,
-		})
 	}
 
 	if opts.SharedSize {
@@ -138,7 +116,74 @@ func (i *ImageService) Images(ctx context.Context, opts types.ImageListOptions) 
 	return summaries, nil
 }
 
-type imageFilterFunc func(image containerd.Image) bool
+func (i *ImageService) singlePlatformImage(ctx context.Context, contentStore content.Store, img images.Image, platform v1.Platform) (*types.ImageSummary, []digest.Digest, error) {
+	platformMatcher := c8dplatforms.OnlyStrict(platform)
+	available, _, _, missing, err := images.Check(ctx, contentStore, img.Target, platformMatcher)
+	if !available || err != nil || len(missing) > 0 {
+		return nil, nil, nil
+	}
+
+	image := containerd.NewImageWithPlatform(i.client, img, platformMatcher)
+
+	diffIDs, err := image.RootFS(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	chainIDs := identity.ChainIDs(diffIDs)
+
+	size, err := image.Size(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	snapshotter := i.client.SnapshotService(i.snapshotter)
+	sizeCache := make(map[digest.Digest]int64)
+
+	snapshotSizeFn := func(d digest.Digest) (int64, error) {
+		if s, ok := sizeCache[d]; ok {
+			return s, nil
+		}
+		usage, err := snapshotter.Usage(ctx, d.String())
+		if err != nil {
+			if cerrdefs.IsNotFound(err) {
+				return 0, nil
+			}
+			return 0, err
+		}
+		sizeCache[d] = usage.Size
+		return usage.Size, nil
+	}
+	virtualSize, err := computeVirtualSize(chainIDs, snapshotSizeFn)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	ref, err := reference.ParseNormalizedNamed(image.Name())
+	if err != nil {
+		return nil, nil, err
+	}
+
+	familiarName := reference.FamiliarString(ref)
+
+	summary := &types.ImageSummary{
+		RepoDigests: []string{familiarName + "@" + image.Target().Digest.String()}, // "hello-world@sha256:bfea6278a0a267fad2634554f4f0c6f31981eea41c553fdf5a83e95a41d40c38"},
+		RepoTags:    []string{familiarName},
+		Containers:  -1,
+		ParentID:    "",
+		VirtualSize: virtualSize,
+		ID:          image.Target().Digest.String(),
+		Created:     image.Metadata().CreatedAt.Unix(),
+		Size:        size,
+		// 		// -1 indicates that the value has not been set (avoids ambiguity
+		// 		// between 0 (default) and "not set". We cannot use a pointer (nil)
+		// 		// for this, as the JSON representation uses "omitempty", which would
+		// 		// consider both "0" and "nil" to be "empty".
+		SharedSize: -1,
+	}
+
+	return summary, chainIDs, nil
+}
+
+type imageFilterFunc func(image images.Image) bool
 
 // setupFilters constructs an imageFilterFunc from the given imageFilters.
 //
@@ -156,8 +201,8 @@ func (i *ImageService) setupFilters(ctx context.Context, imageFilters filters.Ar
 		img, err := i.client.GetImage(ctx, ref.String())
 		if img != nil {
 			t := img.Metadata().CreatedAt
-			fltrs = append(fltrs, func(image containerd.Image) bool {
-				created := image.Metadata().CreatedAt
+			fltrs = append(fltrs, func(image images.Image) bool {
+				created := image.CreatedAt
 				return created.Equal(t) || created.After(t)
 			})
 		}
@@ -175,8 +220,8 @@ func (i *ImageService) setupFilters(ctx context.Context, imageFilters filters.Ar
 		img, err := i.client.GetImage(ctx, ref.String())
 		if img != nil {
 			t := img.Metadata().CreatedAt
-			fltrs = append(fltrs, func(image containerd.Image) bool {
-				created := image.Metadata().CreatedAt
+			fltrs = append(fltrs, func(image images.Image) bool {
+				created := image.CreatedAt
 				return created.Equal(t) || created.Before(t)
 			})
 		}
@@ -197,8 +242,8 @@ func (i *ImageService) setupFilters(ctx context.Context, imageFilters filters.Ar
 		}
 		until := time.Unix(seconds, nanoseconds)
 
-		fltrs = append(fltrs, func(image containerd.Image) bool {
-			created := image.Metadata().CreatedAt
+		fltrs = append(fltrs, func(image images.Image) bool {
+			created := image.CreatedAt
 			return created.Before(until)
 		})
 		return err
@@ -225,7 +270,7 @@ func (i *ImageService) setupFilters(ctx context.Context, imageFilters filters.Ar
 		}
 	}
 
-	return filters, func(image containerd.Image) bool {
+	return filters, func(image images.Image) bool {
 		for _, filter := range fltrs {
 			if !filter(image) {
 				return false
