@@ -238,6 +238,9 @@ func (i *ImageService) presentChildrenHandler() containerdimages.HandlerFunc {
 }
 
 func isDanglingImage(img containerd.Image) bool {
-	danglingName := containerimage.ImagePrefixDangling + "@" + img.Target().Digest.String()
-	return img.Name() == danglingName
+	return img.Name() == danglingImageName(img.Target().Digest)
+}
+
+func danglingImageName(digest digest.Digest) string {
+	return containerimage.ImagePrefixDangling + "@" + digest.String()
 }

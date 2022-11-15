@@ -14,7 +14,7 @@ import (
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/diff"
-	cderrdefs "github.com/containerd/containerd/errdefs"
+	cerrdefs "github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/platforms"
@@ -41,39 +41,27 @@ with adaptations to match the Moby data model and services.
 func (i *ImageService) CommitImage(ctx context.Context, cc backend.CommitConfig) (image.ID, error) {
 	container := i.containers.Get(cc.ContainerID)
 
-	cimg, _, err := i.getImage(ctx, container.Config.Image, nil)
+	baseImg, _, err := i.getImage(ctx, container.Config.Image, nil)
 	if err != nil {
 		return "", err
 	}
+	target := baseImg.Target()
 
-	baseImgWithoutPlatform, err := i.client.ImageService().Get(ctx, cimg.Name())
-	if err != nil {
-		return "", err
-	}
-
-	baseImg := containerd.NewImageWithPlatform(i.client, baseImgWithoutPlatform, platforms.DefaultStrict())
+	platform := platforms.OnlyStrict(cc.ContainerConfig.Platform)
 
 	contentStore := baseImg.ContentStore()
-	conf, err := baseImg.Config(ctx)
+
+	ocimanifest, err := images.Manifest(ctx, contentStore, target, platform)
 	if err != nil {
 		return "", err
 	}
-	imageConfigBytes, err := content.ReadBlob(ctx, baseImg.ContentStore(), conf)
+
+	imageConfigBytes, err := content.ReadBlob(ctx, baseImg.ContentStore(), ocimanifest.Config)
 	if err != nil {
 		return "", err
 	}
 	var ociimage ocispec.Image
 	if err := json.Unmarshal(imageConfigBytes, &ociimage); err != nil {
-		return "", err
-	}
-
-	target := baseImg.Target()
-	b, err := content.ReadBlob(ctx, contentStore, target)
-	if err != nil {
-		return "", err
-	}
-	var ocimanifest ocispec.Manifest
-	if err := json.Unmarshal(b, &ocimanifest); err != nil {
 		return "", err
 	}
 
@@ -112,13 +100,13 @@ func (i *ImageService) CommitImage(ctx context.Context, cc backend.CommitConfig)
 
 	// image create
 	img := images.Image{
-		Name:      configDigest.String(),
+		Name:      danglingImageName(configDigest.Digest()),
 		Target:    commitManifestDesc,
 		CreatedAt: time.Now(),
 	}
 
 	if _, err := i.client.ImageService().Update(ctx, img); err != nil {
-		if !errdefs.IsNotFound(err) {
+		if !cerrdefs.IsNotFound(err) {
 			return "", err
 		}
 
@@ -211,6 +199,8 @@ func writeContentsForImage(ctx context.Context, snName string, baseImg container
 		Size:      int64(len(newMfstJSON)),
 	}
 
+	cs := baseImg.ContentStore()
+
 	// new manifest should reference the layers and config content
 	labels := map[string]string{
 		"containerd.io/gc.ref.content.0": configDesc.Digest.String(),
@@ -219,7 +209,7 @@ func writeContentsForImage(ctx context.Context, snName string, baseImg container
 		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", i+1)] = l.Digest.String()
 	}
 
-	err = content.WriteBlob(ctx, baseImg.ContentStore(), newMfstDesc.Digest.String(), bytes.NewReader(newMfstJSON), newMfstDesc, content.WithLabels(labels))
+	err = content.WriteBlob(ctx, cs, newMfstDesc.Digest.String(), bytes.NewReader(newMfstJSON), newMfstDesc, content.WithLabels(labels))
 	if err != nil {
 		return ocispec.Descriptor{}, "", err
 	}
@@ -228,7 +218,7 @@ func writeContentsForImage(ctx context.Context, snName string, baseImg container
 	labelOpt := content.WithLabels(map[string]string{
 		fmt.Sprintf("containerd.io/gc.ref.snapshot.%s", snName): identity.ChainID(newConfig.RootFS.DiffIDs).String(),
 	})
-	err = content.WriteBlob(ctx, baseImg.ContentStore(), configDesc.Digest.String(), bytes.NewReader(newConfigJSON), configDesc, labelOpt)
+	err = content.WriteBlob(ctx, cs, configDesc.Digest.String(), bytes.NewReader(newConfigJSON), configDesc, labelOpt)
 	if err != nil {
 		return ocispec.Descriptor{}, "", err
 	}
@@ -292,7 +282,7 @@ func applyDiffLayer(ctx context.Context, name string, baseImg ocispec.Image, sn 
 	}
 
 	if err = sn.Commit(ctx, name, key); err != nil {
-		if cderrdefs.IsAlreadyExists(err) {
+		if cerrdefs.IsAlreadyExists(err) {
 			return nil
 		}
 		return err
