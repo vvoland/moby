@@ -8,7 +8,6 @@ package daemon // import "github.com/docker/docker/daemon"
 import (
 	"context"
 	"fmt"
-	"io/fs"
 	"net"
 	"net/url"
 	"os"
@@ -230,12 +229,6 @@ func (daemon *Daemon) restore() error {
 	dir, err := os.ReadDir(daemon.repository)
 	if err != nil {
 		return err
-	}
-
-	// Restoring containers after a restart is not yet supported
-	// when using the containerd content store.
-	if daemon.UsesSnapshotter() {
-		dir = []fs.DirEntry{}
 	}
 
 	// parallelLimit is the maximum number of parallel startup jobs that we
