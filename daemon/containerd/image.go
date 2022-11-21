@@ -70,11 +70,6 @@ func (i *ImageService) GetImage(ctx context.Context, refOrID string, options ima
 }
 
 func (i *ImageService) getImage(ctx context.Context, refOrID string, platform *ocispec.Platform) (containerd.Image, *image.Image, error) {
-	c8dImg, err := i.resolveImage(ctx, refOrID, platform)
-	if err != nil {
-		return nil, nil, err
-	}
-
 	ctrdimg, err := i.GetContainerdImage(ctx, refOrID, platform)
 	if err != nil {
 		return nil, nil, err
@@ -113,9 +108,9 @@ func (i *ImageService) getImage(ctx context.Context, refOrID string, platform *o
 		exposedPorts[nat.Port(k)] = v
 	}
 
-	img := image.NewImage(image.IDFromDigest(c8dImg.Target.Digest))
+	img := image.NewImage(image.IDFromDigest(ctrdimg.Target.Digest))
 	img.V1Image = image.V1Image{
-		ID:           string(c8dImg.Target.Digest),
+		ID:           string(ctrdimg.Target.Digest),
 		OS:           ociimage.OS,
 		Architecture: ociimage.Architecture,
 		Config: &containertypes.Config{
