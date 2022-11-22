@@ -35,15 +35,15 @@ func (i *ImageService) TagImage(ctx context.Context, imageName, repository, tag 
 func (i *ImageService) TagImageWithReference(ctx context.Context, imageID image.ID, newTag reference.Named) error {
 	logrus.Infof("Tagging image %q with reference %q", imageID, newTag.String())
 
-	ci, _, err := i.getImage(ctx, imageID.String(), nil)
+	ci, err := i.GetContainerdImage(ctx, imageID.String(), nil)
 	if err != nil {
 		return err
 	}
 
 	img := containerdimages.Image{
 		Name:   newTag.String(),
-		Target: ci.Target(),
-		Labels: ci.Labels(),
+		Target: ci.Target,
+		Labels: ci.Labels,
 	}
 
 	is := i.client.ImageService()
@@ -51,9 +51,9 @@ func (i *ImageService) TagImageWithReference(ctx context.Context, imageID image.
 
 	if err == nil {
 		if isDanglingImage(ci) {
-			delErr := is.Delete(ctx, ci.Name())
+			delErr := is.Delete(ctx, ci.Name)
 			if delErr != nil {
-				logrus.WithField("name", ci.Name()).Debug("failed to remove dangling image")
+				logrus.WithField("name", ci.Name).Debug("failed to remove dangling image")
 			}
 		}
 	}
