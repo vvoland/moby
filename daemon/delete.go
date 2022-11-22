@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	cerrdefs "github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/leases"
 	"github.com/docker/docker/api/types"
 	containertypes "github.com/docker/docker/api/types/container"
@@ -174,12 +175,9 @@ func (daemon *Daemon) cleanupContainer(container *container.Container, config ty
 		daemon.releaseName(name)
 	}
 	if daemon.UsesSnapshotter() {
-		ctr, err := daemon.containerd.LoadContainer(context.Background(), container.ID)
-		if err != nil {
-			logrus.WithError(err).WithField("container", container.ID).Error("cleanup: failed to delete container from containerd")
-		}
-		err = ctr.Delete(context.Background())
-		if err != nil {
+		ctx := context.TODO()
+		err := daemon.containerdCli.ContainerService().Delete(ctx, container.ID)
+		if err != nil && !cerrdefs.IsNotFound(err) {
 			logrus.WithError(err).WithField("container", container.ID).Error("cleanup: failed to delete container from containerd")
 		}
 	}
