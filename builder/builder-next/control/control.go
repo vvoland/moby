@@ -301,9 +301,6 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 				req.ExporterAttrs["name"] = strings.Join(names, ",")
 			}
 			req.ExporterAttrs["unpack"] = "true"
-			if _, has := req.ExporterAttrs["dangling-name-prefix"]; !has {
-				req.ExporterAttrs["dangling-name-prefix"] = "dangling"
-			}
 		} else {
 			exp, err = w.Exporter(req.Exporter, c.opt.SessionManager)
 			if err != nil {
