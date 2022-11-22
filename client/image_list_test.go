@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -157,4 +158,67 @@ func TestImageListApiBefore125(t *testing.T) {
 	if len(images) != 2 {
 		t.Fatalf("expected 2 images, got %v", images)
 	}
+}
+
+// Checks if shared-size query parameter is set/not being set correctly
+// for /images/json.
+func TestImageListWithSharedSize(t *testing.T) {
+	// performs ImageList call and returns the sent url query
+	getImageListAndGetQuery := func(version string, options types.ImageListOptions) (query url.Values, err error) {
+		client := &Client{
+			client: newMockClient(func(req *http.Request) (*http.Response, error) {
+				query = req.URL.Query()
+
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body:       io.NopCloser(strings.NewReader("[]")),
+				}, nil
+			}),
+			version: version,
+		}
+
+		_, err = client.ImageList(context.Background(), options)
+		return query, err
+	}
+
+	const sharedSize = "shared-size"
+
+	// Check if the shared-size query parameter is unset
+	for _, tC := range []struct {
+		name    string
+		version string
+		options types.ImageListOptions
+	}{
+		{name: "after 1.42, if not requested", version: "1.42", options: types.ImageListOptions{SharedSize: false}},
+		{name: "before 1.42, even if requested", version: "1.41", options: types.ImageListOptions{SharedSize: true}},
+	} {
+		t.Run("unset "+tC.name, func(t *testing.T) {
+			query, err := getImageListAndGetQuery(tC.version, tC.options)
+			if err != nil {
+				t.Error(err)
+			}
+
+			if query.Has(sharedSize) {
+				t.Errorf("expected %q to be unset", sharedSize)
+			}
+		})
+	}
+
+	t.Run("set after 1.42, if requested", func(t *testing.T) {
+		query, err := getImageListAndGetQuery("1.42", types.ImageListOptions{SharedSize: true})
+		if err != nil {
+			t.Error(err)
+		}
+
+		if !query.Has(sharedSize) {
+			t.Errorf("expected %q to be set", sharedSize)
+		}
+
+		actual := query.Get(sharedSize)
+		wanted := "1"
+		if actual != "1" {
+			t.Errorf("expected %q = %q, got: %q", sharedSize, wanted, actual)
+		}
+	})
+
 }
