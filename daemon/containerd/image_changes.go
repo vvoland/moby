@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/mount"
-	"github.com/containerd/containerd/platforms"
 	"github.com/docker/docker/container"
 	"github.com/docker/docker/oci"
 	"github.com/docker/docker/pkg/archive"
@@ -21,15 +19,11 @@ func (i *ImageService) Changes(ctx context.Context, container *container.Contain
 		return nil, uerr
 	}
 
-	cimg, _, uerr := i.getImage(ctx, container.Config.Image, nil)
+	platform := container.Config.Platform
+	baseImg, _, uerr := i.getImage(ctx, container.Config.Image, &platform)
 	if uerr != nil {
 		return nil, uerr
 	}
-	baseImgWithoutPlatform, uerr := i.client.ImageService().Get(ctx, cimg.Name())
-	if uerr != nil {
-		return nil, uerr
-	}
-	baseImg := containerd.NewImageWithPlatform(i.client, baseImgWithoutPlatform, platforms.DefaultStrict())
 	diffIDs, uerr := baseImg.RootFS(ctx)
 	if uerr != nil {
 		return nil, uerr
