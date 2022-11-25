@@ -20,6 +20,7 @@ import (
 	"github.com/docker/docker/image"
 	"github.com/docker/docker/layer"
 	"github.com/docker/go-connections/nat"
+	"github.com/moby/buildkit/frontend/dockerfile/dockerfile2llb"
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -86,7 +87,7 @@ func (i *ImageService) getImage(ctx context.Context, refOrID string, platform *o
 		return nil, nil, err
 	}
 
-	var ociimage ocispec.Image
+	var ociimage dockerfile2llb.Image
 	imageConfigBytes, err := content.ReadBlob(ctx, containerdImage.ContentStore(), conf)
 	if err != nil {
 		return nil, nil, err
@@ -122,7 +123,23 @@ func (i *ImageService) getImage(ctx context.Context, refOrID string, platform *o
 			WorkingDir:   ociimage.Config.WorkingDir,
 			ExposedPorts: exposedPorts,
 			Volumes:      ociimage.Config.Volumes,
+			Labels:       ociimage.Config.Labels,
+			StopSignal:   ociimage.Config.StopSignal,
+			StopTimeout:  ociimage.Config.StopTimeout,
+			ArgsEscaped:  ociimage.Config.ArgsEscaped,
+			Shell:        ociimage.Config.Shell,
+			OnBuild:      ociimage.Config.OnBuild,
 		},
+	}
+	if ociimage.Config.Healthcheck != nil {
+		img.V1Image.Config.Healthcheck = &containertypes.HealthConfig{
+			Test:        ociimage.Config.Healthcheck.Test,
+			Interval:    ociimage.Config.Healthcheck.Interval,
+			Timeout:     ociimage.Config.Healthcheck.Timeout,
+			StartPeriod: ociimage.Config.Healthcheck.StartPeriod,
+			Retries:     ociimage.Config.Healthcheck.Retries,
+		}
+
 	}
 	img.RootFS = rootfs
 
