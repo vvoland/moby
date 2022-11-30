@@ -14,6 +14,8 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/errdefs"
+	"gotest.tools/v3/assert"
+	is "gotest.tools/v3/assert/cmp"
 )
 
 func TestImageListError(t *testing.T) {
@@ -163,62 +165,37 @@ func TestImageListApiBefore125(t *testing.T) {
 // Checks if shared-size query parameter is set/not being set correctly
 // for /images/json.
 func TestImageListWithSharedSize(t *testing.T) {
-	// performs ImageList call and returns the sent url query
-	getImageListAndGetQuery := func(version string, options types.ImageListOptions) (query url.Values, err error) {
-		client := &Client{
-			client: newMockClient(func(req *http.Request) (*http.Response, error) {
-				query = req.URL.Query()
-
-				return &http.Response{
-					StatusCode: http.StatusOK,
-					Body:       io.NopCloser(strings.NewReader("[]")),
-				}, nil
-			}),
-			version: version,
-		}
-
-		_, err = client.ImageList(context.Background(), options)
-		return query, err
-	}
-
+	t.Parallel()
 	const sharedSize = "shared-size"
-
-	// Check if the shared-size query parameter is unset
-	for _, tC := range []struct {
-		name    string
-		version string
-		options types.ImageListOptions
+	for _, tc := range []struct {
+		name       string
+		version    string
+		options    types.ImageListOptions
+		sharedSize string // expected value for the shared-size query param, or empty if it should not be set.
 	}{
-		{name: "after 1.42, if not requested", version: "1.42", options: types.ImageListOptions{SharedSize: false}},
+		{name: "after 1.42, no options set", version: "1.42"},
+		{name: "after 1.42, if requested", version: "1.42", options: types.ImageListOptions{SharedSize: true}, sharedSize: "1"},
 		{name: "before 1.42, even if requested", version: "1.41", options: types.ImageListOptions{SharedSize: true}},
 	} {
-		t.Run("unset "+tC.name, func(t *testing.T) {
-			query, err := getImageListAndGetQuery(tC.version, tC.options)
-			if err != nil {
-				t.Error(err)
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var query url.Values
+			client := &Client{
+				client: newMockClient(func(req *http.Request) (*http.Response, error) {
+					query = req.URL.Query()
+					return &http.Response{
+						StatusCode: http.StatusOK,
+						Body:       io.NopCloser(strings.NewReader("[]")),
+					}, nil
+				}),
+				version: tc.version,
 			}
-
-			if query.Has(sharedSize) {
-				t.Errorf("expected %q to be unset", sharedSize)
-			}
+			_, err := client.ImageList(context.Background(), tc.options)
+			assert.Check(t, err)
+			expectedSet := tc.sharedSize != ""
+			assert.Check(t, is.Equal(query.Has(sharedSize), expectedSet))
+			assert.Check(t, is.Equal(query.Get(sharedSize), tc.sharedSize))
 		})
 	}
-
-	t.Run("set after 1.42, if requested", func(t *testing.T) {
-		query, err := getImageListAndGetQuery("1.42", types.ImageListOptions{SharedSize: true})
-		if err != nil {
-			t.Error(err)
-		}
-
-		if !query.Has(sharedSize) {
-			t.Errorf("expected %q to be set", sharedSize)
-		}
-
-		actual := query.Get(sharedSize)
-		wanted := "1"
-		if actual != "1" {
-			t.Errorf("expected %q = %q, got: %q", sharedSize, wanted, actual)
-		}
-	})
-
 }
