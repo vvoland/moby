@@ -586,7 +586,16 @@ func (daemon *Daemon) refreshImage(ctx context.Context, s *container.Snapshot, f
 	c := s.Container
 	tmpImage := s.Image // keep the original ref if still valid (hasn't changed)
 	if tmpImage != s.ImageID {
-		img, err := daemon.imageService.GetImage(ctx, tmpImage, imagetypes.GetImageOpts{})
+		opts := imagetypes.GetImageOpts{}
+		if daemon.UsesSnapshotter() {
+			ctr, err := daemon.GetContainer(c.ID)
+			if err != nil || ctr == nil {
+				return nil, err
+			}
+			opts.Platform = &ctr.Config.Platform
+		}
+		img, err := daemon.imageService.GetImage(ctx, tmpImage, opts)
+
 		if _, isDNE := err.(images.ErrImageDoesNotExist); err != nil && !isDNE {
 			return nil, err
 		}
