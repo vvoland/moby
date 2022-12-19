@@ -162,11 +162,19 @@ func (i *ImageService) singlePlatformImage(ctx context.Context, contentStore con
 		return nil, nil, err
 	}
 
-	familiarName := reference.FamiliarString(ref)
+	var repoDigests, repoTags []string
+	if isDanglingImage(img) {
+		repoTags = []string{"<none>:<none>"}
+		repoDigests = []string{"<none>@<none>"}
+	} else {
+		familiarName := reference.FamiliarString(ref)
+		repoTags = []string{familiarName}
+		repoDigests = []string{familiarName + "@" + image.Target().Digest.String()}
+	}
 
 	summary := &types.ImageSummary{
-		RepoDigests: []string{familiarName + "@" + image.Target().Digest.String()}, // "hello-world@sha256:bfea6278a0a267fad2634554f4f0c6f31981eea41c553fdf5a83e95a41d40c38"},
-		RepoTags:    []string{familiarName},
+		RepoDigests: repoDigests, // "hello-world@sha256:bfea6278a0a267fad2634554f4f0c6f31981eea41c553fdf5a83e95a41d40c38"},
+		RepoTags:    repoTags,
 		Containers:  -1,
 		ParentID:    "",
 		VirtualSize: virtualSize,
