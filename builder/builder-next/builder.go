@@ -406,7 +406,7 @@ func (b *Builder) Build(ctx context.Context, opt backend.BuildConfig) (*builder.
 		if err != nil {
 			return err
 		}
-		if exporterName != "moby" {
+		if exporterName != "moby" && exporterName != client.ExporterImage {
 			return nil
 		}
 		id, ok := resp.ExporterResponse["containerimage.digest"]
