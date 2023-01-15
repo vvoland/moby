@@ -3,8 +3,10 @@ package containerd
 import (
 	"context"
 
+	cerrdefs "github.com/containerd/containerd/errdefs"
 	containerdimages "github.com/containerd/containerd/images"
 	"github.com/docker/distribution/reference"
+	"github.com/docker/docker/errdefs"
 	"github.com/docker/docker/image"
 	"github.com/sirupsen/logrus"
 )
@@ -33,30 +35,54 @@ func (i *ImageService) TagImage(ctx context.Context, imageName, repository, tag 
 
 // TagImageWithReference adds the given reference to the image ID provided.
 func (i *ImageService) TagImageWithReference(ctx context.Context, imageID image.ID, newTag reference.Named) error {
-	logrus.Infof("Tagging image %q with reference %q", imageID, newTag.String())
+	logger := logrus.WithFields(logrus.Fields{
+		"imageID": imageID.String(),
+		"tag":     newTag.String(),
+	})
 
-	ci, err := i.GetContainerdImage(ctx, imageID.String(), nil)
+	cimg, err := i.GetContainerdImage(ctx, imageID.String(), nil)
 	if err != nil {
+		logger.WithError(err).Debug("failed to resolve image id to a descriptor")
 		return err
 	}
 
 	img := containerdimages.Image{
 		Name:   newTag.String(),
-		Target: ci.Target,
-		Labels: ci.Labels,
+		Target: cimg.Target,
 	}
 
 	is := i.client.ImageService()
 	_, err = is.Create(ctx, img)
+	if err != nil {
+		if !cerrdefs.IsAlreadyExists(err) {
+			logger.WithError(err).Error("failed to create image")
+			return errdefs.System(err)
+		}
+
+		// If there already exists an image with this tag, delete it
+		err := is.Delete(ctx, img.Name)
+
+		if err != nil {
+			logger.WithError(err).Error("failed to delete old image")
+			return errdefs.System(err)
+		}
+
+		_, err = is.Create(ctx, img)
+		if err != nil {
+			logger.WithError(err).Error("failed to create an image after deleting old image")
+			return errdefs.System(err)
+		}
+	}
 
 	if err == nil {
-		if isDanglingImage(ci) {
-			delErr := is.Delete(ctx, ci.Name)
+		if isDanglingImage(cimg) {
+			delErr := is.Delete(ctx, cimg.Name)
 			if delErr != nil {
-				logrus.WithField("name", ci.Name).Debug("failed to remove dangling image")
+				logrus.WithField("name", cimg.Name).Debug("failed to remove dangling image")
 			}
 		}
 	}
 
-	return err
+	logger.Info("image created")
+	return nil
 }
