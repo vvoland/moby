@@ -28,8 +28,8 @@ source "${MAKEDIR}/.go-autogen"
 				export CGO_CXXFLAGS="-march=armv6"
 				;;
 			7)
-				export CGO_CFLAGS="-march=armv7-a"
-				export CGO_CXXFLAGS="-march=armv7-a"
+				export CGO_CFLAGS="-march=armv7-a+fp"
+				export CGO_CXXFLAGS="-march=armv7-a+fp"
 				;;
 		esac
 	fi
