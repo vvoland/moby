@@ -2,6 +2,7 @@ package containerd
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/containerd/containerd"
@@ -13,13 +14,14 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
 	timetypes "github.com/docker/docker/api/types/time"
+	"github.com/docker/docker/errdefs"
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/identity"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 var acceptedImageFilterTags = map[string]bool{
-	"dangling":  false, // TODO(thaJeztah): implement "dangling" filter: see https://github.com/moby/moby/issues/43846
+	"dangling":  true,
 	"label":     true,
 	"before":    true,
 	"since":     true,
@@ -41,6 +43,19 @@ func (i *ImageService) Images(ctx context.Context, opts types.ImageListOptions) 
 	filters, filterFn, err := i.setupFilters(ctx, opts.Filters)
 	if err != nil {
 		return nil, err
+	}
+
+	danglingFilter := opts.Filters.Contains("dangling")
+	danglingValue := false
+	if danglingFilter {
+		if opts.Filters.ExactMatch("dangling", "true") {
+			danglingValue = true
+		} else if opts.Filters.ExactMatch("dangling", "false") {
+			danglingValue = false
+		} else {
+			err := fmt.Errorf("invalid filter 'dangling=%s'", opts.Filters.Get("dangling"))
+			return nil, errdefs.InvalidParameter(err)
+		}
 	}
 
 	imgs, err := i.client.ImageService().List(ctx, filters...)
@@ -75,6 +90,10 @@ func (i *ImageService) Images(ctx context.Context, opts types.ImageListOptions) 
 	contentStore := i.client.ContentStore()
 	for _, img := range imgs {
 		if !filterFn(img) {
+			continue
+		}
+
+		if danglingFilter && danglingValue != isDanglingImage(img) {
 			continue
 		}
 
