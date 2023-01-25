@@ -34,7 +34,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-const ImagePrefixDangling = "dangling"
+const ImagePrefixDangling = "moby-dangling"
 
 const (
 	keyImageName        = "name"

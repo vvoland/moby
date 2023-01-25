@@ -19,6 +19,7 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/identity"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -39,6 +40,8 @@ type RegistryHostsProvider interface {
 
 // NewService creates a new ImageService.
 func NewService(c *containerd.Client, containers container.Store, snapshotter string, hostsProvider RegistryHostsProvider, registry *registry.Service) *ImageService {
+	migrateDanglingImages(c)
+
 	return &ImageService{
 		client:          c,
 		containers:      containers,
@@ -46,6 +49,45 @@ func NewService(c *containerd.Client, containers container.Store, snapshotter st
 		registryHosts:   hostsProvider,
 		registryService: registry,
 	}
+}
+
+// Upstream PR introducing dangling images changed the dangling name
+// format from "dangling@hash" to "moby-dangling@hash".
+// So let's make sure that users that started using containerd integration
+// on our fork keep their images in the same format when we start shipping the
+// upstream engine instead of fork.
+func migrateDanglingImages(c *containerd.Client) {
+	is := c.ImageService()
+	ctx := context.Background()
+	imgs, err := is.List(ctx, `name~="^dangling@sha256:[0-9a-f]{64}$"`)
+	if err != nil {
+		logrus.WithError(err).Error("failed to migrate old dangling images to a new format")
+		return
+	}
+
+	for _, img := range imgs {
+		oldName := img.Name
+		img.Name = danglingImageName(img.Target.Digest)
+		_, err := is.Create(ctx, img)
+		if err != nil {
+			if !cerrdefs.IsAlreadyExists(err) {
+				logrus.WithError(err).WithField("image", img).Error("failed to create new migrated image")
+				continue
+			}
+		}
+
+		err = is.Delete(ctx, oldName)
+		if err != nil {
+			logrus.WithError(err).WithField("image", img).Error("failed to delete old migrated image")
+			continue
+		}
+
+		logrus.WithFields(logrus.Fields{
+			"old": oldName,
+			"new": img.Name,
+		}).Info("migrated image")
+	}
+
 }
 
 // DistributionServices return services controlling daemon image storage.
