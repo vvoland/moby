@@ -592,7 +592,9 @@ func (daemon *Daemon) refreshImage(ctx context.Context, s *container.Snapshot, f
 			if err != nil || ctr == nil {
 				return nil, err
 			}
-			opts.Platform = &ctr.Config.Platform
+			if ctr.Config.Platform.OS != "" {
+				opts.Platform = &ctr.Config.Platform
+			}
 		}
 		img, err := daemon.imageService.GetImage(ctx, tmpImage, opts)
 
