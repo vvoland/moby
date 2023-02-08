@@ -161,7 +161,6 @@ func (i *ImageService) ImageDiskUsage(ctx context.Context) ([]*types.ImageSummar
 //
 // called from reload.go
 func (i *ImageService) UpdateConfig(maxDownloads, maxUploads int) {
-	panic("not implemented")
 }
 
 // GetLayerFolders returns the layer folders from an image RootFS.
