@@ -11,7 +11,6 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	imagetypes "github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/container"
-	"github.com/docker/docker/daemon/images"
 	"github.com/docker/docker/errdefs"
 	"github.com/docker/docker/image"
 	"github.com/docker/go-connections/nat"
@@ -595,8 +594,7 @@ func (daemon *Daemon) refreshImage(ctx context.Context, s *container.Snapshot, f
 			opts.Platform = &ctr.Config.Platform
 		}
 		img, err := daemon.imageService.GetImage(ctx, tmpImage, opts)
-
-		if _, isDNE := err.(images.ErrImageDoesNotExist); err != nil && !isDNE {
+		if err != nil && !errdefs.IsNotFound(err) {
 			return nil, err
 		}
 		if err != nil || img.ImageID() != s.ImageID {
