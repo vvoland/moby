@@ -18,6 +18,7 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/identity"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/sirupsen/logrus"
 )
 
 var acceptedImageFilterTags = map[string]bool{
@@ -176,19 +177,34 @@ func (i *ImageService) singlePlatformImage(ctx context.Context, contentStore con
 		return nil, nil, err
 	}
 
-	ref, err := reference.ParseNormalizedNamed(image.Name())
-	if err != nil {
-		return nil, nil, err
-	}
+	var repoTags, repoDigests []string
+	target := img.Target.Digest
 
-	var repoDigests, repoTags []string
-	if isDanglingImage(img) {
-		repoTags = []string{"<none>:<none>"}
-		repoDigests = []string{"<none>@<none>"}
+	logger := logrus.WithFields(logrus.Fields{
+		"name":   img.Name,
+		"digest": target,
+	})
+
+	ref, err := reference.ParseNamed(img.Name)
+	if err != nil {
+		// If the image has unexpected name format (not a Named reference or a dangling image)
+		// add the offending name to RepoTags but also log an error to make it clear to the
+		// administrator that this is unexpected.
+		// TODO: Reconsider when containerd is more strict on image names, see:
+		//       https://github.com/containerd/containerd/issues/7986
+		if !isDanglingImage(img) {
+			logger.WithError(err).Error("failed to parse image name as reference")
+			repoTags = append(repoTags, img.Name)
+		}
 	} else {
-		familiarName := reference.FamiliarString(ref)
-		repoTags = []string{familiarName}
-		repoDigests = []string{familiarName + "@" + image.Target().Digest.String()}
+		repoTags = append(repoTags, reference.TagNameOnly(ref).String())
+
+		digested, err := reference.WithDigest(reference.TrimNamed(ref), target)
+		if err != nil {
+			logger.WithError(err).Error("failed to create digested reference")
+		} else {
+			repoDigests = append(repoDigests, digested.String())
+		}
 	}
 
 	summary := &types.ImageSummary{
