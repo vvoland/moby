@@ -11,6 +11,7 @@ import (
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/version"
 	registrytypes "github.com/docker/docker/api/types/registry"
+	"github.com/docker/docker/daemon/containerd/peerstore"
 	"github.com/docker/docker/dockerversion"
 	"github.com/docker/docker/pkg/useragent"
 	"github.com/docker/docker/registry"
@@ -24,11 +25,15 @@ func (i *ImageService) newResolverFromAuthConfig(ctx context.Context, authConfig
 	headers := http.Header{}
 	headers.Set("User-Agent", dockerversion.DockerUserAgent(ctx, useragent.VersionInfo{Name: "containerd-client", Version: version.Version}, useragent.VersionInfo{Name: "storage-driver", Version: i.snapshotter}))
 
-	return docker.NewResolver(docker.ResolverOptions{
+	resolver := docker.NewResolver(docker.ResolverOptions{
 		Hosts:   hosts,
 		Tracker: tracker,
 		Headers: headers,
-	}), tracker
+	})
+
+	resolver = peerstore.WrapResolver(resolver, i.network)
+
+	return resolver, tracker
 }
 
 func hostsWrapper(hostsFn docker.RegistryHosts, optAuthConfig *registrytypes.AuthConfig, regService RegistryConfigProvider) docker.RegistryHosts {

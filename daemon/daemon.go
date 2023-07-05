@@ -944,7 +944,19 @@ func NewDaemon(ctx context.Context, config *config.Config, pluginStore *plugin.S
 	}
 
 	if configStore.ContainerdAddr != "" {
-		d.containerdCli, err = containerd.New(configStore.ContainerdAddr, containerd.WithDefaultNamespace(configStore.ContainerdNamespace), containerd.WithDialOpts(gopts), containerd.WithTimeout(60*time.Second))
+		opts := []containerd.ClientOpt{
+			containerd.WithDefaultNamespace(configStore.ContainerdNamespace),
+			containerd.WithDialOpts(gopts),
+			containerd.WithTimeout(60 * time.Second),
+		}
+
+		/*
+			if d.usesSnapshotter {
+				store := ctrd.NewPeerContentStore()
+				opts = append(opts, containerd.WithContentStore(store))
+			}*/
+
+		d.containerdCli, err = containerd.New(configStore.ContainerdAddr, opts...)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to dial %q", configStore.ContainerdAddr)
 		}

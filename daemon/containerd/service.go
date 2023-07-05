@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"sync/atomic"
+	"time"
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/content"
@@ -14,6 +15,7 @@ import (
 	"github.com/docker/distribution/reference"
 	imagetypes "github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/container"
+	"github.com/docker/docker/daemon/containerd/peerstore"
 	daemonevents "github.com/docker/docker/daemon/events"
 	"github.com/docker/docker/daemon/images"
 	"github.com/docker/docker/daemon/snapshotter"
@@ -38,6 +40,7 @@ type ImageService struct {
 	eventsService   *daemonevents.Events
 	pruneRunning    atomic.Bool
 	refCountMounter snapshotter.Mounter
+	network         *peerstore.ContentNetwork
 }
 
 type RegistryConfigProvider interface {
@@ -57,6 +60,25 @@ type ImageServiceConfig struct {
 
 // NewService creates a new ImageService.
 func NewService(config ImageServiceConfig) *ImageService {
+	network, err := peerstore.NewNetwork()
+	if err != nil {
+		log.G(context.TODO()).WithError(err).Error("[p2p] failed to start p2p content network")
+	} else {
+		is := config.Client.ImageService()
+		cs := config.Client.ContentStore()
+		ctx := context.Background()
+
+		go func() {
+			network.Run(ctx, cs)
+		}()
+		go func() {
+			for {
+				time.Sleep(time.Second * 5)
+				network.Advertise(ctx, is, cs)
+			}
+		}()
+
+	}
 	return &ImageService{
 		client:          config.Client,
 		containers:      config.Containers,
@@ -65,6 +87,7 @@ func NewService(config ImageServiceConfig) *ImageService {
 		registryService: config.Registry,
 		eventsService:   config.EventsService,
 		refCountMounter: config.RefCountMounter,
+		network:         network,
 	}
 }
 
