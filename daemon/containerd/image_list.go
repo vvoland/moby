@@ -3,6 +3,7 @@ package containerd
 import (
 	"context"
 	"encoding/json"
+	"sort"
 	"strings"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/docker/distribution/reference"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/image"
 	timetypes "github.com/docker/docker/api/types/time"
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/identity"
@@ -32,9 +34,16 @@ var acceptedImageFilterTags = map[string]bool{
 	"until":     true,
 }
 
+// byCreated is a temporary type used to sort a list of images by creation
+// time.
+type byCreated []*types.ImageSummary
+
+func (r byCreated) Len() int           { return len(r) }
+func (r byCreated) Swap(i, j int)      { r[i], r[j] = r[j], r[i] }
+func (r byCreated) Less(i, j int) bool { return r[i].Created < r[j].Created }
+
 // Images returns a filtered list of images.
 //
-// TODO(thaJeztah): sort the results by created (descending); see https://github.com/moby/moby/issues/43848
 // TODO(thaJeztah): implement opts.ContainerCount (used for docker system df); see https://github.com/moby/moby/issues/43853
 // TODO(thaJeztah): add labels to results; see https://github.com/moby/moby/issues/43852
 // TODO(thaJeztah): verify behavior of `RepoDigests` and `RepoTags` for images without (untagged) or multiple tags; see https://github.com/moby/moby/issues/43861
@@ -44,12 +53,12 @@ func (i *ImageService) Images(ctx context.Context, opts types.ImageListOptions) 
 		return nil, err
 	}
 
-	listFilters, filter, err := i.setupFilters(ctx, opts.Filters)
+	filter, err := i.setupFilters(ctx, opts.Filters)
 	if err != nil {
 		return nil, err
 	}
 
-	imgs, err := i.client.ImageService().List(ctx, listFilters...)
+	imgs, err := i.client.ImageService().List(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +89,11 @@ func (i *ImageService) Images(ctx context.Context, opts types.ImageListOptions) 
 	}
 
 	contentStore := i.client.ContentStore()
+	seenSummaries := map[digest.Digest]bool{}
 	for _, img := range imgs {
+		if seenSummaries[img.Target.Digest] {
+			continue
+		}
 		if !filter(img) {
 			continue
 		}
@@ -104,12 +117,13 @@ func (i *ImageService) Images(ctx context.Context, opts types.ImageListOptions) 
 				return nil
 			}
 
-			image, chainIDs, err := i.singlePlatformImage(ctx, contentStore, img)
+			image, chainIDs, err := i.singlePlatformImage(ctx, contentStore, filter, imgs, img)
 			if err != nil {
 				return err
 			}
 
 			summaries = append(summaries, image)
+			seenSummaries[digest.Digest(image.ID)] = true
 
 			if opts.SharedSize {
 				root = append(root, &chainIDs)
@@ -136,10 +150,12 @@ func (i *ImageService) Images(ctx context.Context, opts types.ImageListOptions) 
 		}
 	}
 
+	sort.Sort(sort.Reverse(byCreated(summaries)))
+
 	return summaries, nil
 }
 
-func (i *ImageService) singlePlatformImage(ctx context.Context, contentStore content.Store, image *ImageManifest) (*types.ImageSummary, []digest.Digest, error) {
+func (i *ImageService) singlePlatformImage(ctx context.Context, contentStore content.Store, filter imageFilterFunc, references []images.Image, image *ImageManifest) (*types.ImageSummary, []digest.Digest, error) {
 	diffIDs, err := image.RootFS(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -199,13 +215,29 @@ func (i *ImageService) singlePlatformImage(ctx context.Context, contentStore con
 			repoTags = append(repoTags, rawImg.Name)
 		}
 	} else {
-		repoTags = append(repoTags, reference.TagNameOnly(ref).String())
-
 		digested, err := reference.WithDigest(reference.TrimNamed(ref), target)
 		if err != nil {
 			logger.WithError(err).Error("failed to create digested reference")
 		} else {
 			repoDigests = append(repoDigests, digested.String())
+		}
+
+		for _, imageRef := range references {
+			if isDanglingImage(imageRef) {
+				continue
+			}
+			if !filter(imageRef) {
+				continue
+			}
+
+			ref, err := reference.ParseNormalizedNamed(imageRef.Name)
+			if err != nil {
+				return nil, nil, err
+			}
+
+			if image.RealTarget.Digest.String() == imageRef.Target.Digest.String() {
+				repoTags = append(repoTags, reference.TagNameOnly(ref).String())
+			}
 		}
 	}
 
@@ -231,47 +263,48 @@ type imageFilterFunc func(image images.Image) bool
 
 // setupFilters constructs an imageFilterFunc from the given imageFilters.
 //
-// containerdListFilters is a slice of filters which should be passed to ImageService.List()
 // filterFunc is a function that checks whether given image matches the filters.
-// TODO(thaJeztah): reimplement filters using containerd filters: see https://github.com/moby/moby/issues/43845
-func (i *ImageService) setupFilters(ctx context.Context, imageFilters filters.Args) (containerdListFilters []string, filterFunc imageFilterFunc, outErr error) {
+// TODO(thaJeztah): reimplement filters using containerd filters if possible: see https://github.com/moby/moby/issues/43845
+func (i *ImageService) setupFilters(ctx context.Context, imageFilters filters.Args) (filterFunc imageFilterFunc, outErr error) {
 	var fltrs []imageFilterFunc
 	err := imageFilters.WalkValues("before", func(value string) error {
-		ref, err := reference.ParseDockerRef(value)
+		img, err := i.GetImage(ctx, value, image.GetImageOpts{})
 		if err != nil {
 			return err
 		}
-		img, err := i.client.GetImage(ctx, ref.String())
-		if img != nil {
-			t := img.Metadata().CreatedAt
-			fltrs = append(fltrs, func(image images.Image) bool {
-				created := image.CreatedAt
-				return created.Equal(t) || created.After(t)
+		if img != nil && img.Created != nil {
+			fltrs = append(fltrs, func(candidate images.Image) bool {
+				cand, err := i.GetImage(ctx, candidate.Name, image.GetImageOpts{})
+				if err != nil {
+					return false
+				}
+				return cand.Created != nil && cand.Created.Before(*img.Created)
 			})
 		}
-		return err
+		return nil
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	err = imageFilters.WalkValues("since", func(value string) error {
-		ref, err := reference.ParseDockerRef(value)
+		img, err := i.GetImage(ctx, value, image.GetImageOpts{})
 		if err != nil {
 			return err
 		}
-		img, err := i.client.GetImage(ctx, ref.String())
-		if img != nil {
-			t := img.Metadata().CreatedAt
-			fltrs = append(fltrs, func(image images.Image) bool {
-				created := image.CreatedAt
-				return created.Equal(t) || created.Before(t)
+		if img != nil && img.Created != nil {
+			fltrs = append(fltrs, func(candidate images.Image) bool {
+				cand, err := i.GetImage(ctx, candidate.Name, image.GetImageOpts{})
+				if err != nil {
+					return false
+				}
+				return cand.Created != nil && cand.Created.After(*img.Created)
 			})
 		}
-		return err
+		return nil
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	err = imageFilters.WalkValues("until", func(value string) error {
@@ -292,12 +325,12 @@ func (i *ImageService) setupFilters(ctx context.Context, imageFilters filters.Ar
 		return err
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	labelFn, err := setupLabelFilter(i.client.ContentStore(), imageFilters)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if labelFn != nil {
 		fltrs = append(fltrs, labelFn)
@@ -306,28 +339,32 @@ func (i *ImageService) setupFilters(ctx context.Context, imageFilters filters.Ar
 	if imageFilters.Contains("dangling") {
 		danglingValue, err := imageFilters.GetBoolOrDefault("dangling", false)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		fltrs = append(fltrs, func(image images.Image) bool {
 			return danglingValue == isDanglingImage(image)
 		})
 	}
 
-	var listFilters []string
 	err = imageFilters.WalkValues("reference", func(value string) error {
-		ref, err := reference.ParseNormalizedNamed(value)
-		if err != nil {
-			return err
-		}
-		ref = reference.TagNameOnly(ref)
-		listFilters = append(listFilters, "name=="+ref.String())
+		fltrs = append(fltrs, func(image images.Image) bool {
+			ref, err := reference.ParseNormalizedNamed(image.Name)
+			if err != nil {
+				return false
+			}
+			found, err := reference.FamiliarMatch(value, ref)
+			if err != nil {
+				return false
+			}
+			return found
+		})
 		return nil
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	return listFilters, func(image images.Image) bool {
+	return func(image images.Image) bool {
 		for _, filter := range fltrs {
 			if !filter(image) {
 				return false
