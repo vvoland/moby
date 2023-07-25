@@ -95,15 +95,28 @@ func (i *ImageService) Images(ctx context.Context, opts types.ImageListOptions) 
 	}
 
 	contentStore := i.client.ContentStore()
-	seenSummaries := map[digest.Digest]bool{}
+	uniqueImages := map[digest.Digest]images.Image{}
+	tagsByDigest := map[digest.Digest][]string{}
+
 	for _, img := range imgs {
-		if seenSummaries[img.Target.Digest] {
+		if isDanglingImage(img) {
 			continue
 		}
 		if !filter(img) {
 			continue
 		}
 
+		dgst := img.Target.Digest
+		uniqueImages[dgst] = img
+
+		ref, err := reference.ParseNormalizedNamed(img.Name)
+		if err != nil {
+			continue
+		}
+		tagsByDigest[dgst] = append(tagsByDigest[dgst], ref.String())
+	}
+
+	for _, img := range uniqueImages {
 		err := i.walkImageManifests(ctx, img, func(img *ImageManifest) error {
 			if isPseudo, err := img.IsPseudoImage(ctx); isPseudo || err != nil {
 				return err
@@ -123,13 +136,12 @@ func (i *ImageService) Images(ctx context.Context, opts types.ImageListOptions) 
 				return nil
 			}
 
-			image, chainIDs, err := i.singlePlatformImage(ctx, contentStore, filter, imgs, img)
+			image, chainIDs, err := i.singlePlatformImage(ctx, contentStore, tagsByDigest[img.RealTarget.Digest], img)
 			if err != nil {
 				return err
 			}
 
 			summaries = append(summaries, image)
-			seenSummaries[digest.Digest(image.ID)] = true
 
 			if opts.SharedSize {
 				root = append(root, &chainIDs)
@@ -161,7 +173,7 @@ func (i *ImageService) Images(ctx context.Context, opts types.ImageListOptions) 
 	return summaries, nil
 }
 
-func (i *ImageService) singlePlatformImage(ctx context.Context, contentStore content.Store, filter imageFilterFunc, references []images.Image, image *ImageManifest) (*types.ImageSummary, []digest.Digest, error) {
+func (i *ImageService) singlePlatformImage(ctx context.Context, contentStore content.Store, repoTags []string, image *ImageManifest) (*types.ImageSummary, []digest.Digest, error) {
 	diffIDs, err := image.RootFS(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -200,7 +212,7 @@ func (i *ImageService) singlePlatformImage(ctx context.Context, contentStore con
 	// (unpacked layers) combined.
 	totalSize := size + snapshotSize
 
-	var repoTags, repoDigests []string
+	var repoDigests []string
 	rawImg := image.Metadata()
 	target := rawImg.Target.Digest
 
@@ -226,24 +238,6 @@ func (i *ImageService) singlePlatformImage(ctx context.Context, contentStore con
 			logger.WithError(err).Error("failed to create digested reference")
 		} else {
 			repoDigests = append(repoDigests, digested.String())
-		}
-
-		for _, imageRef := range references {
-			if isDanglingImage(imageRef) {
-				continue
-			}
-			if !filter(imageRef) {
-				continue
-			}
-
-			ref, err := reference.ParseNormalizedNamed(imageRef.Name)
-			if err != nil {
-				return nil, nil, err
-			}
-
-			if image.RealTarget.Digest.String() == imageRef.Target.Digest.String() {
-				repoTags = append(repoTags, reference.FamiliarString(ref))
-			}
 		}
 	}
 
