@@ -331,6 +331,35 @@ func (rw *rwlayer) Commit() (_ builder.ROLayer, outErr error) {
 		}
 	}()
 
+	// Temporarily unmount the layer, required by the containerd windows snapshotter.
+	// The windowsfilter graphdriver does this inside its own Diff method. We'll put it
+	// back afterwards.
+
+	// TODO: Do we actually need to put it back aterwards?
+	// The only place that calls this in-tree is (b *Builder) exportImage and
+	// that is called from the end of (b *Builder) performCopy which has a
+	// `defer rwLayer.Release()` pending.
+
+	if rw.root != "" {
+		snapshotter := rw.c.SnapshotService(rw.snapshotter)
+		mounts, err := snapshotter.Mounts(ctx, rw.key)
+		if err != nil {
+			log.G(ctx).WithError(err).WithField("root", rw.root).Error("failed to get mounts for RWLayer")
+			return nil, err
+		}
+		if err := mount.UnmountAll(rw.root, 0); err != nil && !errors.Is(err, os.ErrNotExist) {
+			log.G(ctx).WithError(err).WithField("root", rw.root).Error("failed to unmount RWLayer")
+			return nil, err
+		}
+		defer func() {
+			if err := mount.All(mounts, rw.root); err != nil {
+				// As noted above, failing to remount at the end won't affect any use-cases
+				// that Release immediately after Commit. So don't bother mutating outErr.
+				log.G(ctx).WithError(err).WithField("root", rw.root).Error("failed to remount RWLayer")
+			}
+		}()
+	}
+
 	err = snapshotter.Commit(ctx, key, rw.key)
 	if err != nil && !cerrdefs.IsAlreadyExists(err) {
 		return nil, err
