@@ -120,7 +120,8 @@ func deleteAllImages(ctx context.Context, t testing.TB, apiclient client.ImageAP
 func removeImage(ctx context.Context, t testing.TB, apiclient client.ImageAPIClient, ref string) {
 	t.Helper()
 	_, err := apiclient.ImageRemove(ctx, ref, types.ImageRemoveOptions{
-		Force: true,
+		PruneChildren: true,
+		Force:         true,
 	})
 	if errdefs.IsNotFound(err) {
 		return
