@@ -217,6 +217,7 @@ jobs:
           teststat -markdown $(find /tmp/artifacts -type f -name '*.json' -print0 | xargs -0) >> $GITHUB_STEP_SUMMARY
 
   integration-test-prepare:
+    if: inputs.storage != 'snapshotter' || contains(github.event.pull_request.labels.*.name, 'containerd-integration')
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.tests.outputs.matrix }}
