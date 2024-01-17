@@ -42,14 +42,6 @@ const (
 	DefaultGatewayV6AuxKey = "DefaultGatewayIPv6"
 )
 
-type defaultBridgeNetworkConflict struct {
-	ID string
-}
-
-func (d defaultBridgeNetworkConflict) Error() string {
-	return fmt.Sprintf("Stale default bridge network %s", d.ID)
-}
-
 type (
 	iptableCleanFunc   func() error
 	iptablesCleanFuncs []iptableCleanFunc
@@ -236,12 +228,21 @@ func (c *networkConfiguration) Validate() error {
 		}
 	}
 
-	// If default v6 gw is specified, AddressIPv6 must be specified and gw must belong to AddressIPv6 subnet
-	if c.EnableIPv6 && c.DefaultGatewayIPv6 != nil {
-		if c.AddressIPv6 == nil || !c.AddressIPv6.Contains(c.DefaultGatewayIPv6) {
+	if c.EnableIPv6 {
+		// If IPv6 is enabled, AddressIPv6 must have been configured.
+		if c.AddressIPv6 == nil {
+			return errdefs.System(errors.New("no IPv6 address was allocated for the bridge"))
+		}
+		// AddressIPv6 must be IPv6, and not overlap with the LL subnet prefix.
+		if err := validateIPv6Subnet(c.AddressIPv6); err != nil {
+			return err
+		}
+		// If a default gw is specified, it must belong to AddressIPv6's subnet
+		if c.DefaultGatewayIPv6 != nil && !c.AddressIPv6.Contains(c.DefaultGatewayIPv6) {
 			return &ErrInvalidGateway{}
 		}
 	}
+
 	return nil
 }
 
@@ -556,13 +557,6 @@ func (c *networkConfiguration) processIPAM(id string, ipamV4Data, ipamV6Data []d
 		}
 	}
 
-	// TODO(robmry) - move this to networkConfiguration.Validate()
-	//   - but that can't happen until Validate() is called after processIPAM() has set
-	//     up the IP addresses, instead of during parseNetworkOptions().
-	if err := validateIPv6Subnet(c.AddressIPv6); err != nil {
-		return err
-	}
-
 	return nil
 }
 
@@ -588,11 +582,6 @@ func parseNetworkOptions(id string, option options.Generic) (*networkConfigurati
 		if internal, ok := val.(bool); ok && internal {
 			config.Internal = true
 		}
-	}
-
-	// Finally validate the configuration
-	if err = config.Validate(); err != nil {
-		return nil, err
 	}
 
 	if config.BridgeName == "" && !config.DefaultBridge {
@@ -654,13 +643,19 @@ func (d *driver) CreateNetwork(id string, option map[string]interface{}, nInfo d
 	}
 	d.Unlock()
 
-	// Parse and validate the config. It should not be conflict with existing networks' config
+	// Parse the config.
 	config, err := parseNetworkOptions(id, option)
 	if err != nil {
 		return err
 	}
 
+	// Add IP addresses/gateways to the configuration.
 	if err = config.processIPAM(id, ipV4Data, ipV6Data); err != nil {
+		return err
+	}
+
+	// Validate the configuration
+	if err = config.Validate(); err != nil {
 		return err
 	}
 
@@ -671,15 +666,7 @@ func (d *driver) CreateNetwork(id string, option map[string]interface{}, nInfo d
 
 	// check network conflicts
 	if err = d.checkConflict(config); err != nil {
-		nerr, ok := err.(defaultBridgeNetworkConflict)
-		if !ok {
-			return err
-		}
-		// Got a conflict with a stale default network, clean that up and continue
-		log.G(context.TODO()).Warn(nerr)
-		if err := d.deleteNetwork(nerr.ID); err != nil {
-			log.G(context.TODO()).WithError(err).Debug("Error while cleaning up network on conflict")
-		}
+		return err
 	}
 
 	// there is no conflict, now create the network
@@ -697,15 +684,6 @@ func (d *driver) checkConflict(config *networkConfiguration) error {
 		nwConfig := nw.config
 		nw.Unlock()
 		if err := nwConfig.Conflicts(config); err != nil {
-			if nwConfig.DefaultBridge {
-				// We encountered and identified a stale default network
-				// We must delete it as libnetwork is the source of truth
-				// The default network being created must be the only one
-				// This can happen only from docker 1.12 on ward
-				log.G(context.TODO()).Infof("Found stale default bridge network %s (%s)", nwConfig.ID, nwConfig.BridgeName)
-				return defaultBridgeNetworkConflict{nwConfig.ID}
-			}
-
 			return types.ForbiddenErrorf("cannot create network %s (%s): conflicts with network %s (%s): %s",
 				config.ID, config.BridgeName, nwConfig.ID, nwConfig.BridgeName, err.Error())
 		}
@@ -793,7 +771,7 @@ func (d *driver) createNetwork(config *networkConfiguration) (err error) {
 	// Even if a bridge exists try to setup IPv4.
 	bridgeSetup.queueStep(setupBridgeIPv4)
 
-	enableIPv6Forwarding := d.config.EnableIPForwarding && config.AddressIPv6 != nil
+	enableIPv6Forwarding := config.EnableIPv6 && d.config.EnableIPForwarding
 
 	// Conditionally queue setup steps depending on configuration values.
 	for _, step := range []struct {

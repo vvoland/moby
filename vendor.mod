@@ -10,6 +10,7 @@ require (
 	cloud.google.com/go/compute/metadata v0.2.3
 	cloud.google.com/go/logging v1.7.0
 	code.cloudfoundry.org/clock v1.0.0
+	dario.cat/mergo v1.0.0
 	github.com/AdaLogics/go-fuzz-headers v0.0.0-20230811130428-ced1acdcaa24
 	github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1
 	github.com/Graylog2/go-gelf v0.0.0-20191017102106-1550ee647df0
@@ -23,8 +24,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.15.17
 	github.com/aws/smithy-go v1.13.5
 	github.com/cloudflare/cfssl v1.6.4
-	github.com/containerd/cgroups/v3 v3.0.2
-	github.com/containerd/containerd v1.7.11
+	github.com/containerd/cgroups/v3 v3.0.3
+	github.com/containerd/containerd v1.7.12
 	github.com/containerd/continuity v0.4.2
 	github.com/containerd/fifo v1.1.0
 	github.com/containerd/log v0.1.0
@@ -35,7 +36,7 @@ require (
 	github.com/deckarep/golang-set/v2 v2.3.0
 	github.com/distribution/reference v0.5.0
 	github.com/docker/distribution v2.8.3+incompatible
-	github.com/docker/go-connections v0.4.1-0.20231110212414-fa09c952e3ea
+	github.com/docker/go-connections v0.5.0
 	github.com/docker/go-events v0.0.0-20190806004212-e31b211e4f1c
 	github.com/docker/go-metrics v0.0.1
 	github.com/docker/go-units v0.5.0
@@ -45,8 +46,8 @@ require (
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/gddo v0.0.0-20190904175337-72a348e765d2
 	github.com/golang/protobuf v1.5.3
-	github.com/google/go-cmp v0.5.9
-	github.com/google/uuid v1.3.0
+	github.com/google/go-cmp v0.6.0
+	github.com/google/uuid v1.5.0
 	github.com/gorilla/mux v1.8.1
 	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0
 	github.com/hashicorp/go-immutable-radix v1.3.1
@@ -54,9 +55,8 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/hashicorp/memberlist v0.4.0
 	github.com/hashicorp/serf v0.8.5
-	github.com/imdario/mergo v0.3.13
 	github.com/ishidawataru/sctp v0.0.0-20230406120618-7ff4192f6ff2
-	github.com/klauspost/compress v1.17.2
+	github.com/klauspost/compress v1.17.4
 	github.com/miekg/dns v1.1.43
 	github.com/mistifyio/go-zfs/v3 v3.0.1
 	github.com/mitchellh/copystructure v1.2.0
@@ -67,7 +67,7 @@ require (
 	github.com/moby/pubsub v1.0.0
 	github.com/moby/swarmkit/v2 v2.0.0-20230911190601-f082dd7a0cee
 	github.com/moby/sys/mount v0.3.3
-	github.com/moby/sys/mountinfo v0.6.2
+	github.com/moby/sys/mountinfo v0.7.1
 	github.com/moby/sys/sequential v0.5.0
 	github.com/moby/sys/signal v0.7.0
 	github.com/moby/sys/symlink v0.2.0
@@ -76,18 +76,18 @@ require (
 	github.com/morikuni/aec v1.0.0
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.0-rc5
-	github.com/opencontainers/runc v1.1.10
+	github.com/opencontainers/runc v1.1.11
 	github.com/opencontainers/runtime-spec v1.1.0
 	github.com/opencontainers/selinux v1.11.0
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.14.0
-	github.com/rootless-containers/rootlesskit v1.1.1
+	github.com/rootless-containers/rootlesskit/v2 v2.0.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/pflag v1.0.5
 	github.com/tonistiigi/go-archvariant v1.0.0
-	github.com/vbatts/tar-split v0.11.3
+	github.com/vbatts/tar-split v0.11.5
 	github.com/vishvananda/netlink v1.2.1-beta.2
 	github.com/vishvananda/netns v0.0.4
 	go.etcd.io/bbolt v1.3.7
@@ -100,7 +100,7 @@ require (
 	golang.org/x/mod v0.11.0
 	golang.org/x/net v0.17.0
 	golang.org/x/sync v0.3.0
-	golang.org/x/sys v0.15.0
+	golang.org/x/sys v0.16.0
 	golang.org/x/text v0.14.0
 	golang.org/x/time v0.3.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20230711160842-782d3b101e98
@@ -130,7 +130,7 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cenkalti/backoff/v4 v4.2.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
-	github.com/cilium/ebpf v0.9.1 // indirect
+	github.com/cilium/ebpf v0.11.0 // indirect
 	github.com/container-storage-interface/spec v1.5.0 // indirect
 	github.com/containerd/cgroups v1.1.0 // indirect
 	github.com/containerd/console v1.0.3 // indirect
@@ -194,7 +194,7 @@ require (
 	go.etcd.io/etcd/raft/v3 v3.5.6 // indirect
 	go.etcd.io/etcd/server/v3 v3.5.6 // indirect
 	go.opencensus.io v0.24.0 // indirect
-	go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace v0.40.0 // indirect
+	go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace v0.45.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.19.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.19.0 // indirect
 	go.opentelemetry.io/otel/metric v1.19.0 // indirect
@@ -203,6 +203,7 @@ require (
 	go.uber.org/multierr v1.8.0 // indirect
 	go.uber.org/zap v1.21.0 // indirect
 	golang.org/x/crypto v0.17.0 // indirect
+	golang.org/x/exp v0.0.0-20230224173230-c95f2b4c22f2 // indirect
 	golang.org/x/oauth2 v0.10.0 // indirect
 	golang.org/x/tools v0.10.0 // indirect
 	google.golang.org/api v0.126.0 // indirect

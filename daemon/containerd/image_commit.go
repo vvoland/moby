@@ -1,7 +1,6 @@
 package containerd
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -14,10 +13,9 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/diff"
 	cerrdefs "github.com/containerd/containerd/errdefs"
-	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/mount"
-	"github.com/containerd/containerd/rootfs"
+	"github.com/containerd/containerd/pkg/cleanup"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/log"
 	"github.com/docker/docker/api/types/backend"
@@ -27,8 +25,8 @@ import (
 	"github.com/docker/docker/pkg/archive"
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/identity"
-	"github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/pkg/errors"
 )
 
 /*
@@ -81,7 +79,7 @@ func (i *ImageService) CommitImage(ctx context.Context, cc backend.CommitConfig)
 		}
 	}()
 
-	diffLayerDesc, diffID, err := createDiff(ctx, cc.ContainerID, sn, cs, differ)
+	diffLayerDesc, diffID, err := i.createDiff(ctx, cc.ContainerID, sn, cs, differ)
 	if err != nil {
 		return "", fmt.Errorf("failed to export layer: %w", err)
 	}
@@ -98,41 +96,7 @@ func (i *ImageService) CommitImage(ctx context.Context, cc backend.CommitConfig)
 		layers = append(layers, *diffLayerDesc)
 	}
 
-	commitManifestDesc, err := writeContentsForImage(ctx, container.Driver, cs, imageConfig, layers)
-	if err != nil {
-		return "", err
-	}
-
-	// image create
-	img := images.Image{
-		Name:      danglingImageName(commitManifestDesc.Digest),
-		Target:    commitManifestDesc,
-		CreatedAt: time.Now(),
-		Labels: map[string]string{
-			imageLabelClassicBuilderParent: cc.ParentImageID,
-		},
-	}
-
-	if _, err := i.client.ImageService().Update(ctx, img); err != nil {
-		if !cerrdefs.IsNotFound(err) {
-			return "", err
-		}
-
-		if _, err := i.client.ImageService().Create(ctx, img); err != nil {
-			return "", fmt.Errorf("failed to create new image: %w", err)
-		}
-	}
-	id := image.ID(img.Target.Digest)
-
-	c8dImg, err := i.NewImageManifest(ctx, img, commitManifestDesc)
-	if err != nil {
-		return id, err
-	}
-	if err := c8dImg.Unpack(ctx, container.Driver); err != nil && !cerrdefs.IsAlreadyExists(err) {
-		return id, fmt.Errorf("failed to unpack image: %w", err)
-	}
-
-	return id, nil
+	return i.createImageOCI(ctx, imageConfig, digest.Digest(cc.ParentImageID), layers, *cc.ContainerConfig)
 }
 
 // generateCommitImageConfig generates an OCI Image config based on the
@@ -184,75 +148,82 @@ func generateCommitImageConfig(baseConfig imagespec.DockerOCIImage, diffID diges
 	}
 }
 
-// writeContentsForImage will commit oci image config and manifest into containerd's content store.
-func writeContentsForImage(ctx context.Context, snName string, cs content.Store, newConfig imagespec.DockerOCIImage, layers []ocispec.Descriptor) (ocispec.Descriptor, error) {
-	newConfigJSON, err := json.Marshal(newConfig)
-	if err != nil {
-		return ocispec.Descriptor{}, err
-	}
-
-	configDesc := ocispec.Descriptor{
-		MediaType: ocispec.MediaTypeImageConfig,
-		Digest:    digest.FromBytes(newConfigJSON),
-		Size:      int64(len(newConfigJSON)),
-	}
-
-	newMfst := struct {
-		MediaType string `json:"mediaType,omitempty"`
-		ocispec.Manifest
-	}{
-		MediaType: ocispec.MediaTypeImageManifest,
-		Manifest: ocispec.Manifest{
-			Versioned: specs.Versioned{
-				SchemaVersion: 2,
-			},
-			Config: configDesc,
-			Layers: layers,
-		},
-	}
-
-	newMfstJSON, err := json.MarshalIndent(newMfst, "", "    ")
-	if err != nil {
-		return ocispec.Descriptor{}, err
-	}
-
-	newMfstDesc := ocispec.Descriptor{
-		MediaType: ocispec.MediaTypeImageManifest,
-		Digest:    digest.FromBytes(newMfstJSON),
-		Size:      int64(len(newMfstJSON)),
-	}
-
-	// new manifest should reference the layers and config content
-	labels := map[string]string{
-		"containerd.io/gc.ref.content.0": configDesc.Digest.String(),
-	}
-	for i, l := range layers {
-		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", i+1)] = l.Digest.String()
-	}
-
-	err = content.WriteBlob(ctx, cs, newMfstDesc.Digest.String(), bytes.NewReader(newMfstJSON), newMfstDesc, content.WithLabels(labels))
-	if err != nil {
-		return ocispec.Descriptor{}, err
-	}
-
-	// config should reference to snapshotter
-	labelOpt := content.WithLabels(map[string]string{
-		fmt.Sprintf("containerd.io/gc.ref.snapshot.%s", snName): identity.ChainID(newConfig.RootFS.DiffIDs).String(),
-	})
-	err = content.WriteBlob(ctx, cs, configDesc.Digest.String(), bytes.NewReader(newConfigJSON), configDesc, labelOpt)
-	if err != nil {
-		return ocispec.Descriptor{}, err
-	}
-
-	return newMfstDesc, nil
-}
-
 // createDiff creates a layer diff into containerd's content store.
 // If the diff is empty it returns nil empty digest and no error.
-func createDiff(ctx context.Context, name string, sn snapshots.Snapshotter, cs content.Store, comparer diff.Comparer) (*ocispec.Descriptor, digest.Digest, error) {
-	newDesc, err := rootfs.CreateDiff(ctx, name, sn, comparer)
+func (i *ImageService) createDiff(ctx context.Context, name string, sn snapshots.Snapshotter, cs content.Store, comparer diff.Comparer) (*ocispec.Descriptor, digest.Digest, error) {
+	info, err := sn.Stat(ctx, name)
 	if err != nil {
 		return nil, "", err
+	}
+
+	var upper []mount.Mount
+	if !i.idMapping.Empty() {
+		// The rootfs of the container is remapped if an id mapping exists, we
+		// need to "unremap" it before committing the snapshot
+		rootPair := i.idMapping.RootPair()
+		usernsID := fmt.Sprintf("%s-%d-%d-%s", name, rootPair.UID, rootPair.GID, uniquePart())
+		remappedID := usernsID + remapSuffix
+		baseName := name
+
+		if info.Kind == snapshots.KindActive {
+			source, err := sn.Mounts(ctx, name)
+			if err != nil {
+				return nil, "", err
+			}
+
+			// No need to use parent since the whole snapshot is copied.
+			// Using parent would require doing diff/apply while starting
+			// from empty can just copy the whole snapshot.
+			// TODO: Optimize this for overlay mounts, can use parent
+			// and just copy upper directories without mounting
+			upper, err = sn.Prepare(ctx, remappedID, "")
+			if err != nil {
+				return nil, "", err
+			}
+
+			if err := i.copyAndUnremapRootFS(ctx, upper, source); err != nil {
+				return nil, "", err
+			}
+		} else {
+			upper, err = sn.Prepare(ctx, remappedID, baseName)
+			if err != nil {
+				return nil, "", err
+			}
+
+			if err := i.unremapRootFS(ctx, upper); err != nil {
+				return nil, "", err
+			}
+		}
+	} else {
+		if info.Kind == snapshots.KindActive {
+			upper, err = sn.Mounts(ctx, name)
+			if err != nil {
+				return nil, "", err
+			}
+		} else {
+			upperKey := fmt.Sprintf("%s-view-%s", name, uniquePart())
+			upper, err = sn.View(ctx, upperKey, name)
+			if err != nil {
+				return nil, "", err
+			}
+			defer cleanup.Do(ctx, func(ctx context.Context) {
+				sn.Remove(ctx, upperKey)
+			})
+		}
+	}
+
+	lowerKey := fmt.Sprintf("%s-parent-view-%s", info.Parent, uniquePart())
+	lower, err := sn.View(ctx, lowerKey, info.Parent)
+	if err != nil {
+		return nil, "", err
+	}
+	defer cleanup.Do(ctx, func(ctx context.Context) {
+		sn.Remove(ctx, lowerKey)
+	})
+
+	newDesc, err := comparer.Compare(ctx, lower, upper)
+	if err != nil {
+		return nil, "", errors.Wrap(err, "CreateDiff")
 	}
 
 	ra, err := cs.ReaderAt(ctx, newDesc)
@@ -269,12 +240,12 @@ func createDiff(ctx context.Context, name string, sn snapshots.Snapshotter, cs c
 		return nil, "", nil
 	}
 
-	info, err := cs.Info(ctx, newDesc.Digest)
+	cinfo, err := cs.Info(ctx, newDesc.Digest)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to get content info: %w", err)
 	}
 
-	diffIDStr, ok := info.Labels["containerd.io/uncompressed"]
+	diffIDStr, ok := cinfo.Labels["containerd.io/uncompressed"]
 	if !ok {
 		return nil, "", fmt.Errorf("invalid differ response with no diffID")
 	}
@@ -287,31 +258,28 @@ func createDiff(ctx context.Context, name string, sn snapshots.Snapshotter, cs c
 	return &ocispec.Descriptor{
 		MediaType: ocispec.MediaTypeImageLayerGzip,
 		Digest:    newDesc.Digest,
-		Size:      info.Size,
+		Size:      cinfo.Size,
 	}, diffID, nil
 }
 
 // applyDiffLayer will apply diff layer content created by createDiff into the snapshotter.
 func (i *ImageService) applyDiffLayer(ctx context.Context, name string, containerID string, sn snapshots.Snapshotter, differ diff.Applier, diffDesc ocispec.Descriptor) (retErr error) {
-	var (
-		key    = uniquePart() + "-" + name
-		mounts []mount.Mount
-		err    error
-	)
+	// Let containerd know that this snapshot is only for diff-applying.
+	key := snapshots.UnpackKeyPrefix + "-" + uniquePart() + "-" + name
 
 	info, err := sn.Stat(ctx, containerID)
 	if err != nil {
 		return err
 	}
 
-	mounts, err = sn.Prepare(ctx, key, info.Parent)
+	mounts, err := sn.Prepare(ctx, key, info.Parent)
 	if err != nil {
 		return fmt.Errorf("failed to prepare snapshot: %w", err)
 	}
 
 	defer func() {
 		if retErr != nil {
-			// NOTE: the snapshotter should be hold by lease. Even
+			// NOTE: the snapshotter should be held by lease. Even
 			// if the cleanup fails, the containerd gc can delete it.
 			if err := sn.Remove(ctx, key); err != nil {
 				log.G(ctx).Warnf("failed to cleanup aborted apply %s: %s", key, err)
@@ -321,35 +289,6 @@ func (i *ImageService) applyDiffLayer(ctx context.Context, name string, containe
 
 	if _, err = differ.Apply(ctx, diffDesc, mounts); err != nil {
 		return err
-	}
-
-	if !i.idMapping.Empty() {
-		// The rootfs of the container is remapped if an id mapping exists, we
-		// need to "unremap" it before committing the snapshot
-		rootPair := i.idMapping.RootPair()
-		usernsID := fmt.Sprintf("%s-%d-%d", key, rootPair.UID, rootPair.GID)
-		remappedID := usernsID + remapSuffix
-
-		if err = sn.Commit(ctx, name+"-pre", key); err != nil {
-			if cerrdefs.IsAlreadyExists(err) {
-				return nil
-			}
-			return err
-		}
-
-		mounts, err = sn.Prepare(ctx, remappedID, name+"-pre")
-		if err != nil {
-			return err
-		}
-
-		if err := i.unremapRootFS(ctx, mounts); err != nil {
-			return err
-		}
-
-		if err := sn.Commit(ctx, name, remappedID); err != nil {
-			return err
-		}
-		key = remappedID
 	}
 
 	if err = sn.Commit(ctx, name, key); err != nil {

@@ -17,8 +17,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-const remapSuffix = "-remap"
-
 // PrepareSnapshot prepares a snapshot from a parent image for a container
 func (i *ImageService) PrepareSnapshot(ctx context.Context, id string, parentImage string, platform *ocispec.Platform, setupInit func(string) error) error {
 	var parentSnapshot string
@@ -89,10 +87,12 @@ func (i *ImageService) prepareInitLayer(ctx context.Context, id string, parent s
 		return err
 	}
 
-	if err := mount.WithTempMount(ctx, mounts, func(root string) error {
-		return setupInit(root)
-	}); err != nil {
-		return err
+	if setupInit != nil {
+		if err := mount.WithTempMount(ctx, mounts, func(root string) error {
+			return setupInit(root)
+		}); err != nil {
+			return err
+		}
 	}
 
 	return snapshotter.Commit(ctx, id+"-init", id+"-init-key")

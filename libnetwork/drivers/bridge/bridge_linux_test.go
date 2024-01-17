@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"os/exec"
 	"regexp"
 	"strconv"
 	"testing"
@@ -218,6 +219,15 @@ func getIPv4Data(t *testing.T) []driverapi.IPAMData {
 	return []driverapi.IPAMData{ipd}
 }
 
+func getIPv6Data(t *testing.T) []driverapi.IPAMData {
+	ipd := driverapi.IPAMData{AddressSpace: "full"}
+	// There's no default IPv6 address pool, so use an arbitrary unique-local prefix.
+	addr, nw, _ := net.ParseCIDR("fdcd:d1b1:99d2:abcd::1/64")
+	ipd.Pool = nw
+	ipd.Gateway = &net.IPNet{IP: addr, Mask: nw.Mask}
+	return []driverapi.IPAMData{ipd}
+}
+
 func TestCreateFullOptions(t *testing.T) {
 	defer netnsutils.SetupTestOSContext(t)()
 	d := newDriver()
@@ -254,7 +264,7 @@ func TestCreateFullOptions(t *testing.T) {
 			AuxAddresses: map[string]*net.IPNet{DefaultGatewayV4AuxKey: defgw},
 		},
 	}
-	err := d.CreateNetwork("dummy", netOption, nil, ipdList, nil)
+	err := d.CreateNetwork("dummy", netOption, nil, ipdList, getIPv6Data(t))
 	if err != nil {
 		t.Fatalf("Failed to create bridge: %v", err)
 	}
@@ -644,9 +654,18 @@ func testQueryEndpointInfo(t *testing.T, ulPxyEnabled bool) {
 	d := newDriver()
 	d.portAllocator = portallocator.NewInstance()
 
+	var proxyBinary string
+	var err error
+	if ulPxyEnabled {
+		proxyBinary, err = exec.LookPath("docker-proxy")
+		if err != nil {
+			t.Fatalf("failed to lookup userland-proxy binary: %v", err)
+		}
+	}
 	config := &configuration{
 		EnableIPTables:      true,
 		EnableUserlandProxy: ulPxyEnabled,
+		UserlandProxyPath:   proxyBinary,
 	}
 	genericOption := make(map[string]interface{})
 	genericOption[netlabel.GenericData] = config
@@ -663,7 +682,7 @@ func testQueryEndpointInfo(t *testing.T, ulPxyEnabled bool) {
 	genericOption[netlabel.GenericData] = netconfig
 
 	ipdList := getIPv4Data(t)
-	err := d.CreateNetwork("net1", genericOption, nil, ipdList, nil)
+	err = d.CreateNetwork("net1", genericOption, nil, ipdList, nil)
 	if err != nil {
 		t.Fatalf("Failed to create bridge: %v", err)
 	}

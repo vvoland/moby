@@ -442,7 +442,7 @@ func (daemon *Daemon) restore(cfg *configStore) error {
 						c.Lock()
 						c.Paused = false
 						daemon.setStateCounter(c)
-						daemon.updateHealthMonitor(c)
+						daemon.initHealthMonitor(c)
 						if err := c.CheckpointTo(daemon.containersReplica); err != nil {
 							baseLogger.WithError(err).Error("failed to update paused container state")
 						}
@@ -451,7 +451,7 @@ func (daemon *Daemon) restore(cfg *configStore) error {
 				case !c.IsPaused() && alive:
 					logger(c).Debug("restoring healthcheck")
 					c.Lock()
-					daemon.updateHealthMonitor(c)
+					daemon.initHealthMonitor(c)
 					c.Unlock()
 				}
 
@@ -1062,7 +1062,11 @@ func NewDaemon(ctx context.Context, config *config.Config, pluginStore *plugin.S
 	// be set through an environment variable, a daemon start parameter, or chosen through
 	// initialization of the layerstore through driver priority order for example.
 	driverName := os.Getenv("DOCKER_DRIVER")
-	if isWindows {
+	if isWindows && d.UsesSnapshotter() {
+		// Containerd WCOW snapshotter
+		driverName = "windows"
+	} else if isWindows {
+		// Docker WCOW graphdriver
 		driverName = "windowsfilter"
 	} else if driverName != "" {
 		log.G(ctx).Infof("Setting the storage driver from the $DOCKER_DRIVER environment variable (%s)", driverName)
@@ -1220,9 +1224,10 @@ func NewDaemon(ctx context.Context, config *config.Config, pluginStore *plugin.S
 	engineMemory.Set(float64(info.MemTotal))
 
 	log.G(ctx).WithFields(log.Fields{
-		"version":     dockerversion.Version,
-		"commit":      dockerversion.GitCommit,
-		"graphdriver": d.ImageService().StorageDriver(),
+		"version":                dockerversion.Version,
+		"commit":                 dockerversion.GitCommit,
+		"storage-driver":         d.ImageService().StorageDriver(),
+		"containerd-snapshotter": d.UsesSnapshotter(),
 	}).Info("Docker daemon")
 
 	return d, nil
@@ -1585,9 +1590,15 @@ type imageBackend struct {
 	registryService *registry.Service
 }
 
-// GetRepository returns a repository from the registry.
-func (i *imageBackend) GetRepository(ctx context.Context, ref reference.Named, authConfig *registrytypes.AuthConfig) (dist.Repository, error) {
-	return distribution.GetRepository(ctx, ref, &distribution.ImagePullConfig{
+// GetRepositories returns a list of repositories configured for the given
+// reference. Multiple repositories can be returned if the reference is for
+// the default (Docker Hub) registry and a mirror is configured, but it omits
+// registries that were not reachable (pinging the /v2/ endpoint failed).
+//
+// It returns an error if it was unable to reach any of the registries for
+// the given reference, or if the provided reference is invalid.
+func (i *imageBackend) GetRepositories(ctx context.Context, ref reference.Named, authConfig *registrytypes.AuthConfig) ([]dist.Repository, error) {
+	return distribution.GetRepositories(ctx, ref, &distribution.ImagePullConfig{
 		Config: distribution.Config{
 			AuthConfig:      authConfig,
 			RegistryService: i.registryService,
