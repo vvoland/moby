@@ -47,6 +47,15 @@ type Summary struct {
 	// Required: true
 	ParentID string `json:"ParentId"`
 
+	// Platform-specific images available for this image.
+	//
+	// Only present with the containerd integration enabled.
+	//
+	// WARNING: This is experimental and may change at any time without any backward
+	// compatibility.
+	//
+	PlatformImages []PlatformImage `json:"PlatformImages,omitempty"`
+
 	// List of content-addressable digests of locally available image manifests
 	// that the image is referenced from. Multiple manifests can refer to the
 	// same image.

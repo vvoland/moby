@@ -13,6 +13,15 @@ keywords: "API, Docker, rcli, REST, documentation"
      will be rejected.
 -->
 
+## v1.46 API changes
+
+[Docker Engine API v1.46](https://docs.docker.com/engine/api/v1.46/) documentation
+
+* `GET /images/json` response now includes `PlatformImages` field, which contains
+  information about the platform-specific manifests available for the image.
+  WARNING: This is experimental and may change at any time without any backward
+  compatibility.
+
 ## v1.45 API changes
 
 [Docker Engine API v1.45](https://docs.docker.com/engine/api/v1.45/) documentation
