@@ -330,7 +330,7 @@ Function Run-UnitTests() {
     $jsonFilePath = $bundlesDir + "\go-test-report-unit-tests.json"
     $xmlFilePath = $bundlesDir + "\junit-report-unit-tests.xml"
     $coverageFilePath = $bundlesDir + "\coverage-report-unit-tests.txt"
-    $goTestArg = "--format=standard-verbose --jsonfile=$jsonFilePath --junitfile=$xmlFilePath -- " + $raceParm + " -coverprofile=$coverageFilePath -covermode=atomic -ldflags -w -a """ + "-test.timeout=10m" + """ $pkgList"
+    $goTestArg = "--format=standard-verbose --jsonfile=$jsonFilePath --junitfile=$xmlFilePath -- " + $raceParm + " -coverprofile=$coverageFilePath -covermode=atomic -ldflags -w -a """ + "-test.timeout=10m -test.skip=TestFlaky.*" + """ $pkgList"
     Write-Host "INFO: Invoking unit tests run with $GOTESTSUM_LOCATION\gotestsum.exe $goTestArg"
     $pinfo = New-Object System.Diagnostics.ProcessStartInfo
     $pinfo.FileName = "$GOTESTSUM_LOCATION\gotestsum.exe"
@@ -342,6 +342,19 @@ Function Run-UnitTests() {
     $p.Start() | Out-Null
     $p.WaitForExit()
     if ($p.ExitCode -ne 0) { Throw "Unit tests failed" }
+
+    $goTestArg = "--format=standard-verbose --jsonfile=$jsonFilePath --junitfile=$xmlFilePath -- " + $raceParm + " -coverprofile=$coverageFilePath -covermode=atomic -ldflags -w -a """ + "-test.timeout=10m -test.run=TestFlaky.*"""
+    Write-Host "INFO: Invoking unit tests run with $GOTESTSUM_LOCATION\gotestsum.exe $goTestArg"
+    $pinfo = New-Object System.Diagnostics.ProcessStartInfo
+    $pinfo.FileName = "$GOTESTSUM_LOCATION\gotestsum.exe"
+    $pinfo.WorkingDirectory = "$($PWD.Path)"
+    $pinfo.UseShellExecute = $false
+    $pinfo.Arguments = "--rerun-fails=4 --packages=$pkgList " + $goTestArg
+    $p = New-Object System.Diagnostics.Process
+    $p.StartInfo = $pinfo
+    $p.Start() | Out-Null
+    $p.WaitForExit()
+    if ($p.ExitCode -ne 0) { Throw "Unit tests (flaky) failed" }
 }
 
 # Run the integration tests
