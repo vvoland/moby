@@ -20,6 +20,17 @@ keywords: "API, Docker, rcli, REST, documentation"
 * `GET /images/json` response now includes `Manifests` field, which contains
   information about the sub-manifests included in the image index. This
   includes things like platform-specific manifests and build attestations.
+
+  WARNING: This is experimental and may change at any time without any backward
+  compatibility.
+* `POST /images/create` endpoint now supports
+* Add `POST /images/convert` endpoint that allows to create new images by
+  filtering the index of the source image. Supported options are:
+  - `OnlyAvailablePlatforms` - discard image manifests for platforms that are
+	not available locally
+  - `Platforms` - discard image manifests that don't match any of the selected
+  - `NoAttestations` - discard any build attestations
+
   WARNING: This is experimental and may change at any time without any backward
   compatibility.
 
