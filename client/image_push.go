@@ -36,6 +36,10 @@ func (cli *Client) ImagePush(ctx context.Context, image string, options image.Pu
 		}
 	}
 
+	if options.Platform != "" {
+		query.Set("platform", options.Platform)
+	}
+
 	resp, err := cli.tryImagePush(ctx, name, query, options.RegistryAuth)
 	if errdefs.IsUnauthorized(err) && options.PrivilegeFunc != nil {
 		newAuthHeader, privilegeErr := options.PrivilegeFunc()
