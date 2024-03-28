@@ -124,16 +124,23 @@ func (im *ImageManifest) Metadata() containerdimages.Image {
 	return md
 }
 
+func (im *ImageManifest) IsAttestation() bool {
+	// Quick check for buildkit attestation manifests
+	// https://github.com/moby/buildkit/blob/v0.11.4/docs/attestations/attestation-storage.md
+	// This would have also been caught by the layer check below, but it requires
+	// an additional content read and deserialization of Manifest.
+	if _, has := im.Target().Annotations[attestation.DockerAnnotationReferenceType]; has {
+		return true
+	}
+	return false
+}
+
 // IsPseudoImage returns false if the manifest has no layers or any of its layers is a known image layer.
 // Some manifests use the image media type for compatibility, even if they are not a real image.
 func (im *ImageManifest) IsPseudoImage(ctx context.Context) (bool, error) {
 	desc := im.Target()
 
-	// Quick check for buildkit attestation manifests
-	// https://github.com/moby/buildkit/blob/v0.11.4/docs/attestations/attestation-storage.md
-	// This would have also been caught by the layer check below, but it requires
-	// an additional content read and deserialization of Manifest.
-	if _, has := desc.Annotations[attestation.DockerAnnotationReferenceType]; has {
+	if im.IsAttestation() {
 		return true, nil
 	}
 
@@ -197,4 +204,22 @@ func readManifest(ctx context.Context, store content.Provider, desc ocispec.Desc
 	}
 
 	return mfst, nil
+}
+
+// ImagePlatform returns the platform of the image manifest.
+// If the manifest list doesn't have a platform filled, it will be read from the config.
+func (m *ImageManifest) ImagePlatform(ctx context.Context) (ocispec.Platform, error) {
+	target := m.Target()
+	if target.Platform != nil {
+		return *target.Platform, nil
+	}
+
+	configDesc, err := m.Config(ctx)
+	if err != nil {
+		return ocispec.Platform{}, err
+	}
+
+	var out ocispec.Platform
+	err = readConfig(ctx, m.ContentStore(), configDesc, &out)
+	return out, err
 }
