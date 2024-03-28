@@ -2,7 +2,6 @@ package images // import "github.com/docker/docker/daemon/images"
 
 import (
 	"context"
-	"errors"
 	"io"
 	"time"
 
@@ -11,16 +10,11 @@ import (
 	"github.com/docker/docker/api/types/registry"
 	"github.com/docker/docker/distribution"
 	progressutils "github.com/docker/docker/distribution/utils"
-	"github.com/docker/docker/errdefs"
 	"github.com/docker/docker/pkg/progress"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 // PushImage initiates a push operation on the repository named localName.
-func (i *ImageService) PushImage(ctx context.Context, ref reference.Named, platform *ocispec.Platform, metaHeaders map[string][]string, authConfig *registry.AuthConfig, outStream io.Writer) error {
-	if platform == nil {
-		return errdefs.NotImplemented(errors.New("selecting platform is not supported with graphdriver backed image store"))
-	}
+func (i *ImageService) PushImage(ctx context.Context, ref reference.Named, metaHeaders map[string][]string, authConfig *registry.AuthConfig, outStream io.Writer) error {
 	start := time.Now()
 	// Include a buffer so that slow client connections don't affect
 	// transfer performance.
