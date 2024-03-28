@@ -44,6 +44,7 @@ type ImageService interface {
 	ImageHistory(ctx context.Context, name string) ([]*imagetype.HistoryResponseItem, error)
 	CommitImage(ctx context.Context, c backend.CommitConfig) (image.ID, error)
 	SquashImage(id, parent string) (string, error)
+	ImageConvert(ctx context.Context, src string, dst reference.NamedTagged, options imagetype.ConvertOptions) error
 
 	// Containerd related methods
 
