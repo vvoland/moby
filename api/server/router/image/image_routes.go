@@ -187,6 +187,7 @@ func (ir *imageRouter) postImagesPush(ctx context.Context, w http.ResponseWriter
 
 	img := vars["name"]
 	tag := r.Form.Get("tag")
+	platformStr := r.Form.Get("platform")
 
 	var ref reference.Named
 
@@ -205,7 +206,16 @@ func (ir *imageRouter) postImagesPush(ctx context.Context, w http.ResponseWriter
 		ref = r
 	}
 
-	if err := ir.backend.PushImage(ctx, ref, metaHeaders, authConfig, output); err != nil {
+	var platform *ocispec.Platform
+	if platformStr != "" {
+		p, err := platforms.Parse(platformStr)
+		if err != nil {
+			return errdefs.InvalidParameter(err)
+		}
+		platform = &p
+	}
+
+	if err := ir.backend.PushImage(ctx, ref, platform, metaHeaders, authConfig, output); err != nil {
 		if !output.Flushed() {
 			return err
 		}

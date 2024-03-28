@@ -16,9 +16,7 @@ type CreateOptions struct {
 	Platform     string // Platform is the target platform of the image if it needs to be pulled from the registry.
 }
 
-// PullOptions holds information to pull images.
-type PullOptions struct {
-	All          bool
+type authOptions struct {
 	RegistryAuth string // RegistryAuth is the base64 encoded credentials for the registry
 
 	// PrivilegeFunc is a function that clients can supply to retry operations
@@ -28,11 +26,23 @@ type PullOptions struct {
 	//
 	// Also see [github.com/docker/docker/api/types.RequestPrivilegeFunc].
 	PrivilegeFunc func() (string, error)
-	Platform      string
+}
+
+// PullOptions holds information to pull images.
+type PullOptions struct {
+	authOptions
+	All      bool
+	Platform string
 }
 
 // PushOptions holds information to push images.
-type PushOptions PullOptions
+type PushOptions struct {
+	authOptions
+	All bool
+
+	// containerd only
+	Platform string
+}
 
 // ListOptions holds parameters to list images with.
 type ListOptions struct {
