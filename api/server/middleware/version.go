@@ -69,6 +69,7 @@ func (v VersionMiddleware) WrapHandler(handler func(ctx context.Context, w http.
 		w.Header().Set("Server", fmt.Sprintf("Docker/%s (%s)", v.serverVersion, runtime.GOOS))
 		w.Header().Set("API-Version", v.defaultAPIVersion)
 		w.Header().Set("OSType", runtime.GOOS)
+		w.Header().Set("Architecture", runtime.GOARCH)
 
 		apiVersion := vars["version"]
 		if apiVersion == "" {

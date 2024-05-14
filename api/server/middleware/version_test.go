@@ -143,4 +143,5 @@ func TestVersionMiddlewareWithErrorsReturnsHeaders(t *testing.T) {
 	assert.Check(t, is.Contains(hdr.Get("Server"), runtime.GOOS))
 	assert.Check(t, is.Equal(hdr.Get("API-Version"), api.DefaultVersion))
 	assert.Check(t, is.Equal(hdr.Get("OSType"), runtime.GOOS))
+	assert.Check(t, is.Equal(hdr.Get("Architecture"), runtime.GOARCH))
 }
