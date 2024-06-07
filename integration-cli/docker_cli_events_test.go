@@ -338,9 +338,10 @@ func (s *DockerCLIEventSuite) TestEventsFilterImageLabels(c *testing.T) {
 	label := "io.docker.testing=image"
 
 	// Build a test image.
-	buildImageSuccessfully(c, name, build.WithDockerfile(fmt.Sprintf(`
-		FROM busybox:latest
-		LABEL %s`, label)))
+	buildImageSuccessfully(c, name,
+		build.WithDockerfile("FROM busybox:latest\nLABEL "+label),
+		build.WithoutCache, // Make sure image is actually built (and we always get the image create event to get consistent event count)
+	)
 	cli.DockerCmd(c, "tag", name, "labelfiltertest:tag1")
 	cli.DockerCmd(c, "tag", name, "labelfiltertest:tag2")
 	cli.DockerCmd(c, "tag", "busybox:latest", "labelfiltertest:tag3")
@@ -355,9 +356,13 @@ func (s *DockerCLIEventSuite) TestEventsFilterImageLabels(c *testing.T) {
 
 	events := strings.Split(strings.TrimSpace(out), "\n")
 
-	// 2 events from the "docker tag" command, another one is from "docker build"
-	assert.Equal(c, len(events), 3, "Events == %s", events)
+	// 2 events from the "docker tag" command, one from "docker build" and another from creating an image
+	assert.Equal(c, len(events), 4, "Events == %s", events)
 	for _, e := range events {
+		// Ignore image create event emitted by "docker build"
+		if strings.Contains(e, "image create") {
+			continue
+		}
 		assert.Check(c, strings.Contains(e, "labelfiltertest"))
 	}
 }
@@ -560,9 +565,10 @@ func (s *DockerCLIEventSuite) TestEventsFilterType(c *testing.T) {
 	label := "io.docker.testing=image"
 
 	// Build a test image.
-	buildImageSuccessfully(c, name, build.WithDockerfile(fmt.Sprintf(`
-		FROM busybox:latest
-		LABEL %s`, label)))
+	buildImageSuccessfully(c, name,
+		build.WithDockerfile("FROM busybox:latest\nLABEL "+label),
+		build.WithoutCache, // Make sure image is actually built (and we always get the image create event to get consistent event count)
+	)
 	cli.DockerCmd(c, "tag", name, "labelfiltertest:tag1")
 	cli.DockerCmd(c, "tag", name, "labelfiltertest:tag2")
 	cli.DockerCmd(c, "tag", "busybox:latest", "labelfiltertest:tag3")
@@ -571,15 +577,19 @@ func (s *DockerCLIEventSuite) TestEventsFilterType(c *testing.T) {
 		"events",
 		"--since", since,
 		"--until", daemonUnixTime(c),
-		"--filter", fmt.Sprintf("label=%s", label),
+		"--filter", "label="+label,
 		"--filter", "type=image",
 	).Stdout()
 
 	events := strings.Split(strings.TrimSpace(out), "\n")
 
-	// 2 events from the "docker tag" command, another one is from "docker build"
-	assert.Equal(c, len(events), 3, "Events == %s", events)
+	// 2 events from the "docker tag" command, one from "docker build" and another from creating an image
+	assert.Equal(c, len(events), 4, "Events == %s", events)
 	for _, e := range events {
+		// Ignore image create event emitted by "docker build".
+		if strings.Contains(e, "image create") {
+			continue
+		}
 		assert.Check(c, strings.Contains(e, "labelfiltertest"))
 	}
 

@@ -30,6 +30,8 @@ keywords: "API, Docker, rcli, REST, documentation"
 * `POST /images/{name}/push` now supports a `platform` parameter (JSON encoded
   OCI Platform type) that allows selecting a specific platform manifest from
   the multi-platform image.
+* `GET /events` now supports image `create` event that is emitted when a new
+  image is built regardless if it was tagged or not.
 
 ### Deprecated Config fields in `GET /images/{name}/json` response
 

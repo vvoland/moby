@@ -6192,3 +6192,37 @@ func (s *DockerCLIBuildSuite) TestBuildIidFileCleanupOnFail(c *testing.T) {
 	assert.ErrorContains(c, err, "")
 	assert.Equal(c, os.IsNotExist(err), true)
 }
+
+func (s *DockerCLIBuildSuite) TestBuildEmitsImageCreateEvent(t *testing.T) {
+	for _, tc := range []struct {
+		buildkit bool
+	}{
+		{buildkit: false},
+		{buildkit: true},
+	} {
+		tc := tc
+		t.Run(fmt.Sprintf("buildkit=%v", tc.buildkit), func(t *testing.T) {
+			skip.If(t, DaemonIsWindows, "Buildkit is not supported on Windows")
+
+			before := time.Now()
+
+			b := cli.Docker(cli.Args("build"),
+				build.WithoutCache,
+				build.WithDockerfile("FROM busybox\nRUN echo hi >/hello"),
+				build.WithBuildkit(tc.buildkit),
+			)
+			b.Assert(t, icmd.Success)
+			t.Log(b.Stdout())
+			t.Log(b.Stderr())
+
+			cmd := cli.Docker(cli.Args("events",
+				"--filter", "action=create,type=image",
+				"--since", before.Format(time.RFC3339),
+			), cli.WithTimeout(time.Millisecond*300))
+
+			t.Log(cmd.Stdout())
+
+			assert.Check(t, is.Contains(cmd.Stdout(), "image create"))
+		})
+	}
+}
