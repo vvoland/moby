@@ -6215,10 +6215,14 @@ func (s *DockerCLIBuildSuite) TestBuildEmitsImageCreateEvent(t *testing.T) {
 			t.Log(b.Stdout())
 			t.Log(b.Stderr())
 
-			cmd := cli.Docker(cli.Args("events",
-				"--filter", "action=create,type=image",
-				"--since", before.Format(time.RFC3339),
-			), cli.WithTimeout(time.Millisecond*300))
+			cmd := cli.Docker(
+				cli.Args("events",
+					"--filter", "action=create,type=image",
+					"--since", before.Format(time.RFC3339),
+				),
+				cli.WithTimeout(time.Millisecond*300),
+				cli.WithEnvironmentVariables("DOCKER_API_VERSION=v1.46"), // FIXME(thaJeztah): integration-cli runs docker CLI 17.06; we're "upgrading" the API version to a version it doesn't support here ;)
+			)
 
 			t.Log(cmd.Stdout())
 
