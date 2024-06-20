@@ -21,6 +21,7 @@ import (
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/log"
 	"github.com/docker/docker/api/types/backend"
+	"github.com/docker/docker/errdefs"
 	"github.com/docker/docker/image"
 	imagespec "github.com/docker/docker/image/spec/specs-go/v1"
 	"github.com/docker/docker/internal/compatcontext"
@@ -304,6 +305,26 @@ func (i *ImageService) applyDiffLayer(ctx context.Context, name string, containe
 		return err
 	}
 
+	if !i.idMapping.Empty() {
+		for info.Parent != "" {
+			for _, suffix := range []string{remapSuffix, "-init", "-init-key"} {
+				if strings.HasSuffix(info.Parent, suffix) {
+					i, err := sn.Stat(ctx, info.Parent)
+					if err != nil {
+						return err
+					}
+					info = i
+					continue
+				}
+			}
+			break
+		}
+
+		if info.Parent == "" {
+			return errdefs.System(fmt.Errorf("failed to unremap %s", name))
+		}
+	}
+
 	mounts, err = sn.Prepare(ctx, key, info.Parent)
 	if err != nil {
 		return fmt.Errorf("failed to prepare snapshot: %w", err)
@@ -321,35 +342,6 @@ func (i *ImageService) applyDiffLayer(ctx context.Context, name string, containe
 
 	if _, err = differ.Apply(ctx, diffDesc, mounts); err != nil {
 		return err
-	}
-
-	if !i.idMapping.Empty() {
-		// The rootfs of the container is remapped if an id mapping exists, we
-		// need to "unremap" it before committing the snapshot
-		rootPair := i.idMapping.RootPair()
-		usernsID := fmt.Sprintf("%s-%d-%d", key, rootPair.UID, rootPair.GID)
-		remappedID := usernsID + remapSuffix
-
-		if err = sn.Commit(ctx, name+"-pre", key); err != nil {
-			if cerrdefs.IsAlreadyExists(err) {
-				return nil
-			}
-			return err
-		}
-
-		mounts, err = sn.Prepare(ctx, remappedID, name+"-pre")
-		if err != nil {
-			return err
-		}
-
-		if err := i.unremapRootFS(ctx, mounts); err != nil {
-			return err
-		}
-
-		if err := sn.Commit(ctx, name, remappedID); err != nil {
-			return err
-		}
-		key = remappedID
 	}
 
 	if err = sn.Commit(ctx, name, key); err != nil {
