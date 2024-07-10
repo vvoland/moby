@@ -44,6 +44,7 @@ type ImageService interface {
 	CommitImage(ctx context.Context, c backend.CommitConfig) (image.ID, error)
 	SquashImage(id, parent string) (string, error)
 	ImageConvert(ctx context.Context, src string, dsts []reference.NamedTagged, options imagetype.ConvertOptions) error
+	ImageCreateFromJSON(ctx context.Context, ref reference.NamedTagged, jsonReader io.Reader) (ocispec.Descriptor, error)
 
 	// Containerd related methods
 
