@@ -1,0 +1,12 @@
+name: test
+
+on:
+  push:
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Set up Docker
+        uses: vvoland/ghaction-setup-docker@master
