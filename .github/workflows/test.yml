@@ -4,9 +4,45 @@ on:
   push:
 
 jobs:
-  docker:
+  docker-bad-master:
     runs-on: ubuntu-latest
     steps:
       -
         name: Set up Docker
         uses: vvoland/ghaction-setup-docker@master
+        with:
+          version: master
+
+  docker-good-version:
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Set up Docker
+        uses: vvoland/ghaction-setup-docker@master
+        with:
+          version: 27.2.0
+
+  docker-good-archive:
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Set up Docker
+        uses: vvoland/ghaction-setup-docker@master
+        with:
+          version: type=archive,version=v27.2.0
+
+  docker-good-image-master:
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Set up Docker
+        uses: vvoland/ghaction-setup-docker@master
+        with:
+          version: type=image,tag=master
+          daemon-config: |
+            {
+              "debug": true,
+              "features": {
+                "containerd-snapshotter": true
+              }
+            }
