@@ -14,6 +14,7 @@ import (
 	imagetypes "github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/storage"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"golang.org/x/exp/maps"
 	"golang.org/x/sync/semaphore"
 )
 
@@ -44,7 +45,7 @@ func (i *ImageService) ImageInspect(ctx context.Context, refOrID string, _ backe
 	imgDgst := tagged[0].Target.Digest
 
 	repoTags := make([]string, 0, len(tagged))
-	repoDigests := make([]string, 0, len(tagged))
+	repoDigests := make(map[string]struct{}, len(tagged))
 	for _, i := range tagged {
 		if i.UpdatedAt.After(lastUpdated) {
 			lastUpdated = i.UpdatedAt
@@ -69,7 +70,7 @@ func (i *ImageService) ImageInspect(ctx context.Context, refOrID string, _ backe
 
 		repoTags = append(repoTags, reference.FamiliarString(name))
 		if _, ok := name.(reference.Digested); ok {
-			repoDigests = append(repoDigests, reference.FamiliarString(name))
+			repoDigests[reference.FamiliarString(name)] = struct{}{}
 			// Image name is a digested reference already, so no need to create a digested reference.
 			continue
 		}
@@ -82,7 +83,7 @@ func (i *ImageService) ImageInspect(ctx context.Context, refOrID string, _ backe
 			log.G(ctx).WithError(err).Error("failed to create digested reference")
 			continue
 		}
-		repoDigests = append(repoDigests, reference.FamiliarString(digested))
+		repoDigests[reference.FamiliarString(digested)] = struct{}{}
 	}
 
 	var comment string
@@ -101,9 +102,10 @@ func (i *ImageService) ImageInspect(ctx context.Context, refOrID string, _ backe
 	}
 
 	return &imagetypes.InspectResponse{
-		ID:            img.ImageID(),
-		RepoTags:      repoTags,
-		RepoDigests:   repoDigests,
+		ID:       img.ImageID(),
+		RepoTags: repoTags,
+		// TODO: Use maps.Keys from stdlib once we move the module to go >= 1.23
+		RepoDigests:   maps.Keys(repoDigests),
 		Parent:        img.Parent.String(),
 		Comment:       comment,
 		Created:       created,
