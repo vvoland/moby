@@ -20,20 +20,20 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/containerd/platforms"
 	"github.com/containerd/typeurl/v2"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"github.com/containerd/containerd/api/types"
 	transfertypes "github.com/containerd/containerd/api/types/transfer"
-	"github.com/containerd/containerd/content"
-	"github.com/containerd/containerd/errdefs"
-	"github.com/containerd/containerd/images"
-	"github.com/containerd/containerd/images/archive"
-	"github.com/containerd/containerd/pkg/streaming"
-	"github.com/containerd/containerd/pkg/transfer"
-	"github.com/containerd/containerd/pkg/transfer/plugins"
-	"github.com/containerd/containerd/remotes"
+	"github.com/containerd/containerd/v2/core/content"
+	"github.com/containerd/containerd/v2/core/images"
+	"github.com/containerd/containerd/v2/core/images/archive"
+	"github.com/containerd/containerd/v2/core/remotes"
+	"github.com/containerd/containerd/v2/core/streaming"
+	"github.com/containerd/containerd/v2/core/transfer"
+	"github.com/containerd/containerd/v2/core/transfer/plugins"
+	"github.com/containerd/errdefs"
+	"github.com/containerd/platforms"
 )
 
 func init() {
@@ -130,7 +130,7 @@ func WithNamedPrefix(name string, allowOverwrite bool) StoreOpt {
 	}
 }
 
-// WithNamedPrefix uses a named prefix to references images which only have a tag name
+// WithDigestRef uses a named prefix to references images which only have a tag name
 // reference in the annotation or check full references annotations against and
 // additionally may add a digest reference. Images with no references resolved
 // from matching annotations may be stored by digest.
@@ -348,6 +348,10 @@ func (is *Store) Lookup(ctx context.Context, store images.Store) ([]images.Image
 	return imgs, nil
 }
 
+func (is *Store) Platforms() []ocispec.Platform {
+	return is.platforms
+}
+
 func (is *Store) UnpackPlatforms() []transfer.UnpackConfiguration {
 	unpacks := make([]transfer.UnpackConfiguration, len(is.unpacks))
 	for i, uc := range is.unpacks {
@@ -363,7 +367,7 @@ func (is *Store) MarshalAny(context.Context, streaming.StreamCreator) (typeurl.A
 		Labels:          is.imageLabels,
 		ManifestLimit:   uint32(is.manifestLimit),
 		AllMetadata:     is.allMetadata,
-		Platforms:       platformsToProto(is.platforms),
+		Platforms:       types.OCIPlatformToProto(is.platforms),
 		ExtraReferences: referencesToProto(is.extraReferences),
 		Unpacks:         unpackToProto(is.unpacks),
 	}
@@ -380,35 +384,11 @@ func (is *Store) UnmarshalAny(ctx context.Context, sm streaming.StreamGetter, a 
 	is.imageLabels = s.Labels
 	is.manifestLimit = int(s.ManifestLimit)
 	is.allMetadata = s.AllMetadata
-	is.platforms = platformFromProto(s.Platforms)
+	is.platforms = types.OCIPlatformFromProto(s.Platforms)
 	is.extraReferences = referencesFromProto(s.ExtraReferences)
 	is.unpacks = unpackFromProto(s.Unpacks)
 
 	return nil
-}
-
-func platformsToProto(platforms []ocispec.Platform) []*types.Platform {
-	ap := make([]*types.Platform, len(platforms))
-	for i := range platforms {
-		p := types.Platform{
-			OS:           platforms[i].OS,
-			Architecture: platforms[i].Architecture,
-			Variant:      platforms[i].Variant,
-		}
-
-		ap[i] = &p
-	}
-	return ap
-}
-
-func platformFromProto(platforms []*types.Platform) []ocispec.Platform {
-	op := make([]ocispec.Platform, len(platforms))
-	for i := range platforms {
-		op[i].OS = platforms[i].OS
-		op[i].Architecture = platforms[i].Architecture
-		op[i].Variant = platforms[i].Variant
-	}
-	return op
 }
 
 func referencesToProto(references []Reference) []*transfertypes.ImageReference {

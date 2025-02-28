@@ -11,6 +11,9 @@ import (
 	containerd "github.com/containerd/containerd/v2/client"
 	c8dimages "github.com/containerd/containerd/v2/core/images"
 	"github.com/containerd/containerd/v2/core/remotes/docker"
+	"github.com/containerd/containerd/v2/core/transfer"
+	"github.com/containerd/containerd/v2/core/transfer/image"
+	"github.com/containerd/containerd/v2/core/transfer/registry"
 	"github.com/containerd/containerd/v2/pkg/snapshotters"
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/containerd/log"
@@ -46,7 +49,7 @@ func (i *ImageService) PullImage(ctx context.Context, baseRef reference.Named, p
 	defer done()
 
 	if !reference.IsNameOnly(baseRef) {
-		return i.pullTag(ctx, baseRef, platform, metaHeaders, authConfig, out)
+		return i.pullTagTransfer(ctx, baseRef, platform, metaHeaders, authConfig, out)
 	}
 
 	tags, err := distribution.Tags(ctx, baseRef, &distribution.Config{
@@ -68,10 +71,105 @@ func (i *ImageService) PullImage(ctx context.Context, baseRef reference.Named, p
 			continue
 		}
 
-		if err := i.pullTag(ctx, ref, platform, metaHeaders, authConfig, out); err != nil {
+		if err := i.pullTagTransfer(ctx, ref, platform, metaHeaders, authConfig, out); err != nil {
 			return fmt.Errorf("error pulling %s: %w", ref, err)
 		}
 	}
+
+	return nil
+}
+
+type authConfigCreds struct {
+	*registrytypes.AuthConfig
+}
+
+func (c authConfigCreds) GetCredentials(ctx context.Context, ref, host string) (registry.Credentials, error) {
+	if host == c.ServerAddress {
+		if c.RegistryToken != "" {
+			return registry.Credentials{
+				Host:   c.ServerAddress,
+				Header: fmt.Sprintf("Bearer %s", c.RegistryToken),
+			}, nil
+		}
+		if c.IdentityToken != "" {
+			return registry.Credentials{
+				Host:   c.ServerAddress,
+				Secret: c.IdentityToken,
+			}, nil
+		}
+		if c.Password != "" {
+			return registry.Credentials{
+				Host:     c.ServerAddress,
+				Username: c.Username,
+				Secret:   c.Password,
+			}, nil
+		}
+	}
+
+	return registry.Credentials{}, nil
+}
+
+func (i *ImageService) pullTagTransfer(ctx context.Context, ref reference.Named, platform *ocispec.Platform, metaHeaders map[string][]string, authConfig *registrytypes.AuthConfig, out progress.Output) error {
+	allPlatforms := false
+	var sopts []image.StoreOpt
+
+	if platform == nil {
+		var p = platforms.DefaultSpec()
+		platform = &p
+	}
+
+	sopts = append(sopts, image.WithUnpack(*platform, i.snapshotter))
+	if !allPlatforms {
+		sopts = append(sopts, image.WithPlatforms(*platform))
+	}
+	sopts = append(sopts, image.WithAllMetadata)
+
+	reg, err := registry.NewOCIRegistry(ctx, ref.String(),
+		registry.WithHeaders(metaHeaders),
+		registry.WithCredentials(authConfigCreds{authConfig}),
+	)
+	if err != nil {
+		return err
+	}
+	is := image.NewStore(ref.String(), sopts...)
+
+	pf := func(p transfer.Progress) {
+		log.G(ctx).WithFields(log.Fields{
+			"event":    p.Event,
+			"name":     p.Name,
+			"parents":  p.Parents,
+			"progress": p.Progress,
+			"total":    p.Total,
+			"desc":     p.Desc,
+		}).Info("progress")
+		out.WriteProgress(progress.Progress{
+			ID:      p.Name,
+			Action:  p.Event,
+			Current: p.Progress,
+			Total:   p.Total,
+		})
+	}
+
+	var fetcher transfer.ImageFetcher = reg
+	var storer transfer.ImageStorer = is
+
+	if err := i.transfer.Transfer(ctx, fetcher, storer, transfer.WithProgress(transfer.ProgressFunc(pf))); err != nil {
+		return err
+	}
+
+	i.LogImageEvent(ctx, reference.FamiliarString(ref), reference.FamiliarName(ref), events.ActionPull)
+
+	// TODO: Requires 2.0 updates to transfer service progress to get target image descriptor
+	// The pull succeeded, so try to remove any dangling image we have for this target
+	//err = i.images.Delete(compatcontext.WithoutCancel(ctx), danglingImageName(img.Target().Digest))
+	//if err != nil && !cerrdefs.IsNotFound(err) {
+	//	// Image pull succeeded, but cleaning up the dangling image failed. Ignore the
+	//	// error to not mark the pull as failed.
+	//	logger.WithError(err).Warn("unexpected error while removing outdated dangling image reference")
+	//}
+	//
+	//progress.Message(out, "", "Digest: "+img.Target().Digest.String())
+	//writeStatus(out, reference.FamiliarString(ref), old.Digest != img.Target().Digest)
 
 	return nil
 }
