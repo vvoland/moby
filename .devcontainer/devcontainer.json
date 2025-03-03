@@ -6,10 +6,15 @@
     "target": "devcontainer"
   },
   "workspaceFolder": "/go/src/github.com/docker/docker",
-  "workspaceMount": "source=${localWorkspaceFolder},target=/go/src/github.com/docker/docker,type=bind,consistency=cached",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/go/src/github.com/docker/docker,type=bind",
 
   "remoteUser": "root",
+
   "runArgs": ["--privileged"],
+
+  "mounts": [
+    "type=bind,source=/Users/pawel/c/moby/.git,target=/Users/pawel/c/moby/.git"
+  ],
 
   "customizations": {
     "vscode": {
