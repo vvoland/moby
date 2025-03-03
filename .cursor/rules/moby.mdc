@@ -1,0 +1,77 @@
+---
+description: General rules for this repository
+globs: *.go
+alwaysApply: false
+---
+# Moby / Docker Engine
+
+## Project Overview
+Moby is an open-source project created by Docker to advance the software containerization movement. It's the foundation of the Docker Engine, providing container runtime, orchestration, and other core container functionalities.
+
+## Repository Structure
+- `/api`: Docker Engine API definitions, including Swagger specs and API types
+- `/builder`: Container image building functionality
+- `/client`: Docker client implementation
+- `/cmd`: Main executables
+  - `/cmd/dockerd`: Docker daemon (server)
+  - `/cmd/docker-proxy`: Network proxy for containers
+- `/container`: Container management code
+- `/daemon`: Core Docker daemon implementation
+- `/daemon/containerd`: Containerd image store integration (prefered over graphdrivers)
+- `/daemon/graphdriver`: Legacy graphdriver-based image store
+- `/distribution`: Image distribution and registry interaction
+- `/image`: Image management
+- `/layer`: Container filesystem layers
+- `/libcontainerd`: Interface to containerd
+- `/libnetwork`: Container networking
+- `/pkg`: Shared packages and utilities
+- `/plugin`: Plugin system
+- `/registry`: Registry client code
+- `/volume`: Volume management
+
+## Code Organization
+- The codebase follows Go package conventions
+- Platform-specific code is separated with filename suffixes:
+  - `_linux.go`, `_unix.go`, `_windows.go`
+- Tests are located alongside the code they test
+- Integration tests are in `/integration` 
+- Integration tests that use the CLI directly are in `/integration-cli` (deprecated)
+
+## Development Workflow
+- Code changes should include appropriate tests
+- Unit tests prefer `gotest.tools/v3/assert` assertions
+- `gotest.tools/v3/assert/cmp` import MUST be aliased as `is`.
+- API integration tests are in `/integration/<component>` directories
+- API changes MUST be reflected in the swagger file
+
+## Testing Guidelines
+- New features should be covered by unit tests
+- Bug fixes should include a test case that exercises the bug
+- The legacy test suite in `integration-cli/` is deprecated
+
+## Cross-Platform Support
+- Platform-specific code is isolated in separate files
+- Many components have platform-specific implementations
+
+## Key Components
+- **Daemon**: Core server component that manages containers
+- **Client**: API client for interacting with the daemon
+- **Builder**: Builds container images from Dockerfiles
+- **Container**: Container lifecycle management
+- **Image**: Container image management
+- **Volume**: Persistent data storage
+- **Network**: Container networking
+
+## Common Patterns
+- Many packages follow a client-server model
+- Error handling uses the `errdefs` package for standardized errors
+- Configuration is often handled through options pattern
+- Platform-specific code is isolated through build tags and file suffixes
+
+## Best Practices
+- Follow Go coding conventions
+- Use interfaces for better testability
+- Separate platform-specific code
+- Write tests for new code and bug fixes
+- Consider backward compatibility for API changes
+

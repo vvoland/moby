@@ -1,0 +1,55 @@
+---
+description: containerd integration
+globs: 
+alwaysApply: false
+---
+# Docker Engine/Moby Containerd Integration
+
+## Overview
+
+Docker Engine has already been using the containerd as an underlying container runtime, but still had its own image management (graphdrivers).
+We're working on further integration of the Docker Engine with containerd and are also moving to the containerd image and content store.
+
+Currently, the split between the legacy image store and the containerd store is performed by the `ImageService` interface:
+
+1. `daemon/containerd`: Implements the Docker image store with containerd content and image store
+2. `daemon/images`: Implements the Docker image store with graphdrivers (legacy)
+
+## Image service
+
+The image service is mainly responsible for:
+
+- Image management (pull, push, build, tag, delete, etc.)
+- Image inspection and listing
+- Image layer management
+
+## libcontainerd
+
+While naming might be confusing, this is not directly related to the containerd image store integration.
+libcontainerd is mostly a helper to interact with the containerd as the container runtime and is much less relevant in the overall containerd image store works.
+
+## Main changes and considerations
+
+The shift to containerd image store allows for better multi-platform image management.
+This is because images now directly target the manifest/OCI index instead of a platform specific image config.
+However, this fundamental change also poses many challenges, especially at keeping the UX consistent with the legacy image store.
+
+Bear in mind, that Docker Engine interacts with the containerd via the containerd's client. Containerd also has its own daemon, so its client code might not explain all things that happen on the containerd side.
+Most of the needed containerd code is vendored into the `vendor/github.com/containerd/containerd` and you should consult it when interacting with containerd.
+However, not all things are implemented on containerd client-side, so they WON'T be available in the vendored code.
+
+You must remember that in some cases, the things that are needed are already implemented on the containerd side. You must also consider, that a change might need to be made on the containerd side (in long-term, we should upstream most of our code to the containerd directly).
+
+
+## State
+
+The containerd integration is already working, but we still need to pay the tech debt, solve incompatibilities and fix the rough edges.
+
+## High-level roadmap
+
+- [x] Initial implementation
+- [ ] Feature parity
+- [ ] Make containerd default for fresh installs
+- [ ] Better UX for containerd image store
+- [ ] Deprecate graphdrivers
+- [ ] Remove graphdrivers
