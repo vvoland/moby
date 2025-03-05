@@ -1,0 +1,71 @@
+name: Nightly Go Fuzz Tests
+
+# Only grant read permissions to the repository contents
+permissions:
+  contents: read
+
+on:
+  schedule:
+    # Run at 2:00 AM UTC every day
+    - cron: '0 2 * * *'
+  workflow_dispatch:  # Allow manual triggering
+
+env:
+  GO_VERSION: "1.23.7"
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: vendor.sum
+
+      - name: Find packages with fuzz tests
+        run: |
+          pkgs=$(go list  -f '{{.ImportPath}}' ./... | grep -vE 'vendor|integration-cli|integration')
+
+          pkgs=""
+          process_pkg() {
+            local pkg="$1"
+            fuzz_funcs=$(go test -list "^TestFuzz" "$pkg" | grep -m 1 -E '^TestFuzz')
+            if [ -n "$fuzz_funcs" ]; then
+              pkgs="$pkgs, \"$pkg\""
+            fi
+          }
+
+          for pkg in $pkgs; do
+            process_pkg "$pkg" &
+          done
+          wait
+
+          echo "matrix=[$pkgs]" >> $GITHUB_OUTPUT
+
+  fuzz:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    needs: prepare
+    strategy:
+      matrix:
+        pkg: ${{ fromJson(needs.prepare.outputs.matrix) }}
+
+    steps:
+      - name: Run fuzz tests
+        run: |
+          for pkg in ${{ matrix.pkg }}; do
+            go test -fuzz=. -fuzztime=300s $pkg
+          done
+
+      - name: Upload crashers
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crashers
+          path: "**/testdata/fuzz/**"
+          retention-days: 7 
