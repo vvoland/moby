@@ -1,0 +1,33 @@
+name: Test setup-docker action
+
+# Default to 'contents: read', which grants actions to read commits.
+#
+# If any permission is set, any permission not included in the list is
+# implicitly set to "none".
+#
+# see https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#permissions
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'master'
+      - '[0-9]+.[0-9]+'
+      - '[0-9]+.x'
+    #paths:
+    #  - 'contrib/**'
+  pull_request:
+    #paths:
+    #  - 'contrib/**'
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Set up Docker
+        uses: docker/setup-docker-action@v4
+        with:
+          target: ${{ github.ref_name }}
