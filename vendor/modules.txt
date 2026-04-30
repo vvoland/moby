@@ -1219,7 +1219,7 @@ github.com/moby/policy-helpers/types
 # github.com/moby/profiles/apparmor v0.2.0
 ## explicit; go 1.23.0
 github.com/moby/profiles/apparmor
-# github.com/moby/profiles/seccomp v0.2.0
+# github.com/moby/profiles/seccomp v0.2.0 => github.com/vvoland/profiles/seccomp v0.1.1-0.20260430205038-da4aec2b135c
 ## explicit; go 1.23.0
 github.com/moby/profiles/seccomp
 # github.com/moby/pubsub v1.0.0
@@ -2151,3 +2151,4 @@ tags.cncf.io/container-device-interface/pkg/parser
 # tags.cncf.io/container-device-interface/specs-go v1.1.0
 ## explicit; go 1.19
 tags.cncf.io/container-device-interface/specs-go
+# github.com/moby/profiles/seccomp => github.com/vvoland/profiles/seccomp v0.1.1-0.20260430205038-da4aec2b135c
