@@ -26,9 +26,9 @@ var (
 )
 
 // compileAndExecSocketDenied writes a C source file into the container,
-// compiles it, runs the binary as uid 1000, and asserts that socket creation
-// fails.
-func compileAndExecSocketDenied(ctx context.Context, t *testing.T, apiClient client.APIClient, cID string, name string, src string) {
+// compiles it with the given compiler command, runs the binary as uid 1000,
+// and asserts that socket creation fails.
+func compileAndExecSocketDenied(ctx context.Context, t *testing.T, apiClient client.APIClient, cID string, name string, src string, cc []string) {
 	t.Helper()
 
 	binPath := "/tmp/" + name
@@ -39,9 +39,8 @@ func compileAndExecSocketDenied(ctx context.Context, t *testing.T, apiClient cli
 	})
 	res.AssertSuccess(t)
 
-	res = container.ExecT(ctx, t, apiClient, cID, []string{
-		"gcc", srcPath, "-o", binPath,
-	})
+	compileCmd := append(cc, srcPath, "-o", binPath)
+	res = container.ExecT(ctx, t, apiClient, cID, compileCmd)
 	res.AssertSuccess(t)
 
 	res, err := container.Exec(ctx, apiClient, cID, []string{binPath},
@@ -71,19 +70,37 @@ func TestExecSocketDenied(t *testing.T) {
 	})
 	res.AssertSuccess(t)
 
+	gcc := []string{"gcc"}
+
 	t.Run("AF_ALG", func(t *testing.T) {
-		compileAndExecSocketDenied(ctx, t, apiClient, cID, "AF_ALG", afALGSource)
+		compileAndExecSocketDenied(ctx, t, apiClient, cID, "AF_ALG", afALGSource, gcc)
 	})
 	t.Run("AF_VSOCK", func(t *testing.T) {
-		compileAndExecSocketDenied(ctx, t, apiClient, cID, "AF_VSOCK", afVSOCKSource)
+		compileAndExecSocketDenied(ctx, t, apiClient, cID, "AF_VSOCK", afVSOCKSource, gcc)
 	})
 
 	// Test AF_ALG via the socketcall(2) multiplexer, which is used by glibc
 	// on i386 instead of a direct socket(2) syscall. The program uses
 	// int $0x80 to invoke the ia32 socketcall from a native 64-bit binary.
-	t.Run("AF_ALG_socketcall", func(t *testing.T) {
+	t.Run("AF_ALG_socketcall_int80", func(t *testing.T) {
 		skip.If(t, runtime.GOARCH != "amd64", "int $0x80 ia32 compat only available on amd64")
 
-		compileAndExecSocketDenied(ctx, t, apiClient, cID, "AF_ALG_socketcall", afALGSocketcallSource)
+		compileAndExecSocketDenied(ctx, t, apiClient, cID, "AF_ALG_socketcall_int80", afALGSocketcallSource, gcc)
+	})
+
+	// Test AF_ALG with a real i386 binary cross-compiled from amd64. glibc
+	// on i386 routes socket() through the socketcall(2) multiplexer, which
+	// is a different seccomp path than the native socket(2) syscall.
+	t.Run("AF_ALG_socketcall_i386", func(t *testing.T) {
+		skip.If(t, runtime.GOARCH != "amd64", "i386 cross-compilation only available on amd64")
+
+		res := container.ExecT(ctx, t, apiClient, cID, []string{
+			"sh", "-c", "apt-get install -y --no-install-recommends gcc-i686-linux-gnu libc6-dev-i386-cross linux-libc-dev-i386-cross",
+		})
+		res.AssertSuccess(t)
+
+		compileAndExecSocketDenied(ctx, t, apiClient, cID, "AF_ALG_socketcall_i386", afALGSource,
+			[]string{"i686-linux-gnu-gcc", "-static"},
+		)
 	})
 }
