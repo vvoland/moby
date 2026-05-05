@@ -22,6 +22,9 @@ var (
 
 	//go:embed testdata/af_alg_socketcall.c
 	afALGSocketcallSource string
+
+	//go:embed testdata/af_inet_socketcall.c
+	afINETSocketcallSource string
 )
 
 // compileAndExecSocketDenied writes a C source file into the container,
