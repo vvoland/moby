@@ -32,6 +32,10 @@ profile "{{.Name}}" flags=(attach_disconnected,mediate_deleted) {
 {{- end}}{{if .InnerImports}}
 {{end}}
   network,
+  # Deny AF_ALG sockets to prevent access to the kernel crypto API.
+  # This mitigates CVE-2026-31431 ("Copy Fail") and covers the
+  # socketcall(2) bypass that seccomp cannot filter.
+  deny network alg,
   capability,
   file,
   umount,

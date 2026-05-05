@@ -56,8 +56,9 @@ func compileAndExecSocketDenied(ctx context.Context, t *testing.T, apiClient cli
 }
 
 // TestExecSocketDenied verifies that AF_ALG and AF_VSOCK sockets cannot be
-// created inside a container. These address families are blocked by the
-// default seccomp profile.
+// created inside a container. AF_ALG is blocked by the default seccomp profile
+// (via socket arg filtering) and by the default AppArmor profile (via
+// "deny network alg"). AF_VSOCK is blocked by seccomp only.
 func TestExecSocketDenied(t *testing.T) {
 	skip.If(t, testEnv.DaemonInfo.OSType != "linux")
 
@@ -87,10 +88,12 @@ func TestExecSocketDenied(t *testing.T) {
 	// Test AF_ALG via the socketcall(2) multiplexer using int $0x80 to
 	// invoke the ia32 compat syscall path from a native 64-bit binary.
 	// MAP_32BIT is used to place the args array below 4 GB, since the
-	// ia32 compat path truncates all registers to 32 bits.
+	// ia32 compat path truncates all registers to 32 bits. socketcall(2)
+	// bypasses seccomp's socket arg filter, but AppArmor's
+	// "deny network alg" catches it at the kernel socket layer.
 	t.Run("AF_ALG_socketcall_int80", func(t *testing.T) {
 		skip.If(t, !isAmd64, "int $0x80 ia32 compat only available on amd64")
 
-		compileAndExecSocketDenied(ctx, t, apiClient, cID, "AF_ALG_socketcall_int80", afALGSocketcallSource, gcc, "not implemented")
+		compileAndExecSocketDenied(ctx, t, apiClient, cID, "AF_ALG_socketcall_int80", afALGSocketcallSource, gcc, "permission denied")
 	})
 }
