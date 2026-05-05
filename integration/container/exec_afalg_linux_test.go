@@ -96,4 +96,30 @@ func TestExecSocketDenied(t *testing.T) {
 
 		compileAndExecSocketDenied(ctx, t, apiClient, cID, "AF_ALG_socketcall_int80", afALGSocketcallSource, gcc, "permission denied")
 	})
+
+	// Verify that non-AF_ALG sockets still work via socketcall. This
+	// ensures the AppArmor "deny network alg" rule is targeted and does
+	// not break legitimate socketcall usage (e.g. AF_INET).
+	t.Run("AF_INET_socketcall_int80", func(t *testing.T) {
+		skip.If(t, !isAmd64, "int $0x80 ia32 compat only available on amd64")
+
+		binPath := "/tmp/AF_INET_socketcall_int80"
+		srcPath := binPath + ".c"
+
+		res := container.ExecT(ctx, t, apiClient, cID, []string{
+			"sh", "-c", "cat > " + srcPath + " << 'CEOF'\n" + afINETSocketcallSource + "\nCEOF",
+		})
+		res.AssertSuccess(t)
+
+		res = container.ExecT(ctx, t, apiClient, cID, append(gcc, srcPath, "-o", binPath))
+		res.AssertSuccess(t)
+
+		res, err := container.Exec(ctx, apiClient, cID, []string{binPath},
+			func(ec *client.ExecCreateOptions) {
+				ec.User = "1000"
+			},
+		)
+		assert.NilError(t, err)
+		assert.Check(t, is.Equal(res.ExitCode, 0), "expected AF_INET socketcall to succeed, got: %s", res.Combined())
+	})
 }
