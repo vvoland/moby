@@ -1,14 +1,20 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <errno.h>
 #include <unistd.h>
 #include <sys/mman.h>
 
 #define SYS_SOCKETCALL_I386 102
 #define SYS_SOCKET 1
-#define AF_INET 2
-#define SOCK_STREAM 1
 
-int main() {
+int main(int argc, char *argv[]) {
+    if (argc != 3) {
+        fprintf(stderr, "usage: %s <address_family> <socket_type>\n", argv[0]);
+        return 2;
+    }
+    unsigned int family = atoi(argv[1]);
+    unsigned int type = atoi(argv[2]);
+
     /*
      * The int $0x80 ia32 compat path truncates all registers to 32 bits.
      * The args pointer must live below 4 GB, so allocate it with MAP_32BIT.
@@ -21,8 +27,8 @@ int main() {
         perror("mmap");
         return 2;
     }
-    args[0] = AF_INET;
-    args[1] = SOCK_STREAM;
+    args[0] = family;
+    args[1] = type;
     args[2] = 0;
 
     int ret;
@@ -39,7 +45,7 @@ int main() {
         return 1;
     }
 
-    printf("AF_INET socket created via socketcall\n");
+    printf("socket(%u, %u, 0) created via socketcall\n", family, type);
     close(ret);
     return 0;
 }

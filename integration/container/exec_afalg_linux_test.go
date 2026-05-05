@@ -20,11 +20,8 @@ var (
 	//go:embed testdata/af_vsock.c
 	afVSOCKSource string
 
-	//go:embed testdata/af_alg_socketcall.c
-	afALGSocketcallSource string
-
-	//go:embed testdata/af_inet_socketcall.c
-	afINETSocketcallSource string
+	//go:embed testdata/socketcall.c
+	socketcallSource string
 )
 
 // compileAndExecSocketDenied writes a C source file into the container,
@@ -88,41 +85,52 @@ func TestExecSocketDenied(t *testing.T) {
 		compileAndExecSocketDenied(ctx, t, apiClient, cID, "AF_VSOCK", afVSOCKSource, gcc, "not permitted")
 	})
 
-	// Test AF_ALG via the socketcall(2) multiplexer using int $0x80 to
-	// invoke the ia32 compat syscall path from a native 64-bit binary.
-	// MAP_32BIT is used to place the args array below 4 GB, since the
-	// ia32 compat path truncates all registers to 32 bits. socketcall(2)
-	// bypasses seccomp's socket arg filter, but AppArmor's
-	// "deny network alg" catches it at the kernel socket layer.
-	t.Run("AF_ALG_socketcall_int80", func(t *testing.T) {
+	// Test socketcall(2) via int $0x80 to invoke the ia32 compat syscall
+	// path from a native 64-bit binary. MAP_32BIT is used to place the
+	// args array below 4 GB since the ia32 compat path truncates all
+	// registers to 32 bits.
+	//
+	// The socketcall binary takes address family and socket type as args.
+	t.Run("socketcall_int80", func(t *testing.T) {
 		skip.If(t, !isAmd64, "int $0x80 ia32 compat only available on amd64")
 
-		compileAndExecSocketDenied(ctx, t, apiClient, cID, "AF_ALG_socketcall_int80", afALGSocketcallSource, gcc, "permission denied")
-	})
-
-	// Verify that non-AF_ALG sockets still work via socketcall. This
-	// ensures the AppArmor "deny network alg" rule is targeted and does
-	// not break legitimate socketcall usage (e.g. AF_INET).
-	t.Run("AF_INET_socketcall_int80", func(t *testing.T) {
-		skip.If(t, !isAmd64, "int $0x80 ia32 compat only available on amd64")
-
-		binPath := "/tmp/AF_INET_socketcall_int80"
+		binPath := "/tmp/socketcall_int80"
 		srcPath := binPath + ".c"
 
 		res := container.ExecT(ctx, t, apiClient, cID, []string{
-			"sh", "-c", "cat > " + srcPath + " << 'CEOF'\n" + afINETSocketcallSource + "\nCEOF",
+			"sh", "-c", "cat > " + srcPath + " << 'CEOF'\n" + socketcallSource + "\nCEOF",
 		})
 		res.AssertSuccess(t)
 
 		res = container.ExecT(ctx, t, apiClient, cID, append(gcc, srcPath, "-o", binPath))
 		res.AssertSuccess(t)
 
-		res, err := container.Exec(ctx, apiClient, cID, []string{binPath},
-			func(ec *client.ExecCreateOptions) {
-				ec.User = "1000"
-			},
-		)
-		assert.NilError(t, err)
-		assert.Check(t, is.Equal(res.ExitCode, 0), "expected AF_INET socketcall to succeed, got: %s", res.Combined())
+		// AF_ALG (38) via socketcall must be denied by AppArmor's
+		// "deny network alg" rule, which catches it at the kernel
+		// socket layer even though seccomp cannot filter socketcall args.
+		t.Run("AF_ALG", func(t *testing.T) {
+			res, err := container.Exec(ctx, apiClient, cID,
+				[]string{binPath, "38", "5"}, // AF_ALG, SOCK_SEQPACKET
+				func(ec *client.ExecCreateOptions) {
+					ec.User = "1000"
+				},
+			)
+			assert.NilError(t, err)
+			assert.Check(t, is.Equal(res.ExitCode, 1), "expected AF_ALG socketcall to fail, got: %s", res.Combined())
+			assert.Check(t, is.Contains(strings.ToLower(res.Combined()), "permission denied"))
+		})
+
+		// AF_INET (2) via socketcall must still work to ensure the
+		// deny rule is targeted and does not break legitimate usage.
+		t.Run("AF_INET", func(t *testing.T) {
+			res, err := container.Exec(ctx, apiClient, cID,
+				[]string{binPath, "2", "1"}, // AF_INET, SOCK_STREAM
+				func(ec *client.ExecCreateOptions) {
+					ec.User = "1000"
+				},
+			)
+			assert.NilError(t, err)
+			assert.Check(t, is.Equal(res.ExitCode, 0), "expected AF_INET socketcall to succeed, got: %s", res.Combined())
+		})
 	})
 }
