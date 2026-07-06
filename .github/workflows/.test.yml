@@ -98,9 +98,19 @@ jobs:
           retention-days: 1
 
   integration-flaky:
+    name: integration-flaky (${{ matrix.run }})
     runs-on: ubuntu-24.04${{ inputs.runnerSuffix }}
     timeout-minutes: 120 # guardrails timeout for the whole job
     continue-on-error: ${{ github.event_name != 'pull_request' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        run:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
     steps:
       -
         name: Checkout
@@ -130,6 +140,9 @@ jobs:
         run: |
           make -o build test-integration-flaky
         env:
+          # 5 matrix runs * 5 repeats * count 10 = 250 executions.
+          TEST_COUNT: 10
+          TEST_REPEAT: 5
           TEST_SKIP_INTEGRATION_CLI: 1
 
   integration-prepare:
