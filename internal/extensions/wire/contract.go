@@ -16,6 +16,7 @@
 package wire
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -93,10 +94,56 @@ type fieldPlan struct {
 	elem *msgPlan
 }
 
+// ctxType and errType are the fixed positions in a point method's signature.
+var (
+	ctxType = reflect.TypeOf((*context.Context)(nil)).Elem()
+	errType = reflect.TypeOf((*error)(nil)).Elem()
+)
+
+// NewContractFor derives the wire contract for a point from its provider
+// interface: the methods are read off the interface itself, so the Go interface
+// really is the only place the contract is written down. There is no method list
+// to keep in step with it and no way for the two to drift.
+//
+// Every method must be shaped
+//
+//	Name(context.Context, *Request) (*Response, error)
+//	Name(context.Context, *Request) error
+//
+// and anything else is rejected here -- when the point is registered at daemon
+// start -- rather than failing at call time.
+func NewContractFor(pointID, service string, iface reflect.Type) (*Contract, error) {
+	if iface.Kind() != reflect.Interface {
+		return nil, fmt.Errorf("point %q: %s is not an interface", pointID, iface)
+	}
+	methods := make([]Method, 0, iface.NumMethod())
+	for i := 0; i < iface.NumMethod(); i++ {
+		m := iface.Method(i)
+		ft := m.Type
+		if ft.NumIn() != 2 || ft.In(0) != ctxType || ft.In(1).Kind() != reflect.Ptr {
+			return nil, fmt.Errorf("point %q method %s: want (context.Context, *Request)", pointID, m.Name)
+		}
+		method := Method{Name: m.Name, Request: ft.In(1).Elem()}
+		switch {
+		case ft.NumOut() == 1 && ft.Out(0) == errType:
+			// A bare-error method; an empty response message is synthesized.
+		case ft.NumOut() == 2 && ft.Out(1) == errType && ft.Out(0).Kind() == reflect.Ptr:
+			method.Response = ft.Out(0).Elem()
+		default:
+			return nil, fmt.Errorf("point %q method %s: result must be error or (*Response, error)", pointID, m.Name)
+		}
+		methods = append(methods, method)
+	}
+	return NewContract(pointID, service, methods)
+}
+
 // NewContract derives the wire contract for a point from its methods. pointID is
 // the point id (used as the proto package) and service is the gRPC service name
 // within it. It returns an error if any reachable message type uses a field
 // shape the wire format does not support.
+//
+// Most callers want [NewContractFor], which reads the methods off the point's
+// provider interface instead of taking them as data.
 func NewContract(pointID, service string, methods []Method) (*Contract, error) {
 	c := &Contract{PointID: pointID, Service: service, methods: methods}
 
