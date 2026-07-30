@@ -1,42 +1,10 @@
 package extensions
 
 import (
-	"errors"
 	"testing"
 
 	"gotest.tools/v3/assert"
 )
-
-type recordingRegistrar struct {
-	extensions []Extension
-	err        error
-}
-
-func (r *recordingRegistrar) Register(ext Extension) error {
-	if r.err != nil {
-		return r.err
-	}
-	r.extensions = append(r.extensions, ext)
-	return nil
-}
-
-func TestRegisterAllRegistersExtensions(t *testing.T) {
-	registrar := &recordingRegistrar{}
-
-	err := RegisterAll(registrar, New(Declaration{ID: "first"}), New(Declaration{ID: "second"}))
-	assert.NilError(t, err)
-	assert.Equal(t, len(registrar.extensions), 2)
-	assert.Equal(t, registrar.extensions[0].Declaration().ID, ExtensionID("first"))
-	assert.Equal(t, registrar.extensions[1].Declaration().ID, ExtensionID("second"))
-}
-
-func TestRegisterAllReturnsRegisterError(t *testing.T) {
-	wantErr := errors.New("register failed")
-	registrar := &recordingRegistrar{err: wantErr}
-
-	err := RegisterAll(registrar, New(Declaration{ID: "extension"}))
-	assert.ErrorIs(t, err, wantErr)
-}
 
 func TestDefinePointValidatesID(t *testing.T) {
 	valid := []PointID{

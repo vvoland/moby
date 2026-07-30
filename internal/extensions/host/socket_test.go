@@ -90,8 +90,9 @@ func TestSocketExposure(t *testing.T) {
 	assert.NilError(t, err)
 	defer conn.Close()
 
-	var resp greeterv0.HelloReply
-	err = wire.Invoke(ctx, conn, greeterv0.Wire.Contract, "Greet", &greeterv0.HelloRequest{Name: "world"}, &resp)
+	resp, err := wire.Call[greeterv0.HelloReply](ctx,
+		wire.Client{Contract: greeterv0.Wire.Contract, Conn: conn}, "Greet",
+		&greeterv0.HelloRequest{Name: "world"})
 	assert.NilError(t, err)
 	assert.Equal(t, resp.Message, "hello world")
 }
@@ -130,8 +131,9 @@ func TestHookOnlyServicesAreNotSocketExposed(t *testing.T) {
 
 	conn, ok := h.Conn(id)
 	assert.Check(t, ok)
-	var resp echov1.EchoResponse
-	err = wire.Invoke(ctx, conn, echov1.Wire.Contract, "Echo", &echov1.EchoRequest{Message: "private"}, &resp)
+	resp, err := wire.Call[echov1.EchoResponse](ctx,
+		wire.Client{Contract: echov1.Wire.Contract, Conn: conn}, "Echo",
+		&echov1.EchoRequest{Message: "private"})
 	assert.NilError(t, err)
 	assert.Equal(t, resp.Message, "private")
 }
@@ -169,8 +171,9 @@ func TestInProcessServiceExposure(t *testing.T) {
 	assert.NilError(t, err)
 	defer conn.Close()
 
-	var resp greeterv0.HelloReply
-	err = wire.Invoke(ctx, conn, greeterv0.Wire.Contract, "Greet", &greeterv0.HelloRequest{Name: "world"}, &resp)
+	resp, err := wire.Call[greeterv0.HelloReply](ctx,
+		wire.Client{Contract: greeterv0.Wire.Contract, Conn: conn}, "Greet",
+		&greeterv0.HelloRequest{Name: "world"})
 	assert.NilError(t, err)
 	assert.Equal(t, resp.Message, "hello world")
 }

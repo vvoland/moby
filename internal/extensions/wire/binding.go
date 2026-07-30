@@ -56,7 +56,7 @@ type Binding[T any] struct {
 // contract this daemon cannot carry fails at build time in the package that owns
 // it, rather than when some extension first declares the point.
 func Bind[T any](p extensions.Point[T], service string, newClient func(Client) T) Binding[T] {
-	contract := MustContract(p, service)
+	contract := mustContract(p, service)
 	return Binding[T]{
 		Contract: contract,
 		Client: ClientPoint{

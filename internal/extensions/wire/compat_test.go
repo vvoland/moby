@@ -17,20 +17,10 @@ import (
 // types, exactly as the runtime does.
 func createSpecContract(t *testing.T) *wire.Contract {
 	t.Helper()
-	c, err := wire.NewContract(
+	c, err := wire.NewContractFor(
 		string(createspecv0.Point.ID()),
 		"CreateSpecHook",
-		[]wire.Method{
-			{
-				Name:     "CreateSpec",
-				Request:  reflect.TypeOf(createspecv0.SpecRequest{}),
-				Response: reflect.TypeOf(createspecv0.SpecAdjustment{}),
-			},
-			{
-				Name:    "Validate",
-				Request: reflect.TypeOf(createspecv0.SpecRequest{}),
-			},
-		},
+		reflect.TypeOf((*createspecv0.Hook)(nil)).Elem(),
 	)
 	assert.NilError(t, err)
 	return c

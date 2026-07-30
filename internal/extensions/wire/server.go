@@ -62,7 +62,7 @@ func ServiceDesc(c *Contract, impl any) (*grpc.ServiceDesc, error) {
 
 // providerMethod finds and type-checks the provider method backing one contract
 // method.
-func providerMethod(implType reflect.Type, m Method) (reflect.Method, error) {
+func providerMethod(implType reflect.Type, m method) (reflect.Method, error) {
 	fn, ok := implType.MethodByName(m.Name)
 	if !ok {
 		return reflect.Method{}, fmt.Errorf("provider %s has no method %s", implType, m.Name)
@@ -79,7 +79,7 @@ func providerMethod(implType reflect.Type, m Method) (reflect.Method, error) {
 // handler builds the gRPC handler for one method. It decodes the request into a
 // dynamic message, converts it to the contract's Go type, calls the provider,
 // and converts the result back.
-func (c *Contract) handler(m Method, fn reflect.Method) grpc.MethodHandler {
+func (c *Contract) handler(m method, fn reflect.Method) grpc.MethodHandler {
 	return func(srv any, ctx context.Context, dec func(any) error, interceptor grpc.UnaryServerInterceptor) (any, error) {
 		reqMsg, reqVal, err := c.NewRequest(m.Name)
 		if err != nil {

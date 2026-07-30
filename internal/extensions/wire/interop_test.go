@@ -111,8 +111,8 @@ func TestGenericServerServesGeneratedClient(t *testing.T) {
 
 // TestGeneratedServerServesGenericClient is the same interop in reverse: a
 // server built from the generated stubs, called through the derived contract.
-// Both the interface-adapter and the struct-of-funcs client shapes are
-// exercised, since those are the two ways a point can be reached in process.
+// Both a method returning a response and a bare-error method are exercised,
+// since the empty response message is synthesized rather than declared.
 func TestGeneratedServerServesGenericClient(t *testing.T) {
 	c, err := wire.NewContractFor(
 		string(createspecv0.Point.ID()), "CreateSpecHook",
@@ -128,37 +128,17 @@ func TestGeneratedServerServesGenericClient(t *testing.T) {
 	defer cancel()
 
 	t.Run("Invoke", func(t *testing.T) {
-		var adj createspecv0.SpecAdjustment
-		err := wire.Invoke(ctx, conn, c, "CreateSpec", &createspecv0.SpecRequest{
-			ContainerID: "cafe",
-			Spec:        []byte("spec"),
-		}, &adj)
+		adj, err := wire.Call[createspecv0.SpecAdjustment](ctx,
+			wire.Client{Contract: c, Conn: conn}, "CreateSpec",
+			&createspecv0.SpecRequest{ContainerID: "cafe", Spec: []byte("spec")})
 		assert.NilError(t, err)
 		assert.Check(t, is.Equal(string(adj.Spec), "adjusted:spec"))
 	})
 
 	t.Run("bare-error method", func(t *testing.T) {
-		err := wire.Invoke(ctx, conn, c, "Validate", &createspecv0.SpecRequest{ContainerID: "cafe"}, nil)
+		err := wire.Do(ctx, wire.Client{Contract: c, Conn: conn}, "Validate",
+			&createspecv0.SpecRequest{ContainerID: "cafe"})
 		assert.NilError(t, err)
-	})
-
-	// The struct-of-funcs shape: a contract expressed as function fields can be
-	// bound entirely at runtime, with no per-point adapter, because reflect can
-	// build a function even though it cannot build an interface implementation.
-	t.Run("BindFuncs", func(t *testing.T) {
-		var funcs struct {
-			CreateSpec func(context.Context, *createspecv0.SpecRequest) (*createspecv0.SpecAdjustment, error)
-			Validate   func(context.Context, *createspecv0.SpecRequest) error
-		}
-		assert.NilError(t, c.BindFuncs(conn, &funcs))
-
-		adj, err := funcs.CreateSpec(ctx, &createspecv0.SpecRequest{
-			ContainerID: "cafe",
-			Spec:        []byte("spec"),
-		})
-		assert.NilError(t, err)
-		assert.Check(t, is.Equal(string(adj.Spec), "adjusted:spec"))
-		assert.NilError(t, funcs.Validate(ctx, &createspecv0.SpecRequest{ContainerID: "cafe"}))
 	})
 }
 

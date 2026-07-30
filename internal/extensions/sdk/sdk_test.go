@@ -92,7 +92,7 @@ func TestRegisterRejectsUnknownPoint(t *testing.T) {
 
 func TestListenRejectsUnsupportedProtocol(t *testing.T) {
 	srv := NewServer()
-	err := srv.ListenWithIO(context.Background(), strings.NewReader(`{"endpoint":"/tmp/x.sock","protocolVersion":999}`), io.Discard)
+	err := srv.listenWithIO(context.Background(), strings.NewReader(`{"endpoint":"/tmp/x.sock","protocolVersion":999}`), io.Discard)
 	assert.ErrorContains(t, err, "unsupported extension protocol version")
 }
 
@@ -125,7 +125,7 @@ func TestListenDeliversConfig(t *testing.T) {
 	// Serve in the background; the readiness ack on stdout signals it is listening.
 	pr, pw := io.Pipe()
 	done := make(chan error, 1)
-	go func() { done <- srv.ListenWithIO(ctx, bytes.NewReader(in), pw) }()
+	go func() { done <- srv.listenWithIO(ctx, bytes.NewReader(in), pw) }()
 	_, err = io.ReadFull(pr, make([]byte, len(ReadinessAck)))
 	assert.NilError(t, err)
 

@@ -186,21 +186,6 @@ type Resolver interface {
 	Providers(PointID) []ResolvedProvider
 }
 
-// Registrar registers extensions.
-type Registrar interface {
-	Register(Extension) error
-}
-
-// RegisterAll registers exts with registrar.
-func RegisterAll(registrar Registrar, exts ...Extension) error {
-	for _, ext := range exts {
-		if err := registrar.Register(ext); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // Config is an extension's per-extension configuration, delivered by id: to
 // in-process extensions through Init, and to out-of-process ones through the
 // startup handshake. It is the parsed configuration object (as from

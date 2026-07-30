@@ -151,11 +151,12 @@ func (s *Server) Depends(regs ...wire.ClientPoint) {
 
 // Listen reads the startup config from stdin and serves the registered services.
 func (s *Server) Listen(ctx context.Context) error {
-	return s.ListenWithIO(ctx, os.Stdin, os.Stdout)
+	return s.listenWithIO(ctx, os.Stdin, os.Stdout)
 }
 
-// ListenWithIO is Listen with explicit streams, for tests.
-func (s *Server) ListenWithIO(ctx context.Context, stdin io.Reader, stdout io.Writer) error {
+// listenWithIO is Listen with explicit streams, so tests can drive the
+// handshake without a real process.
+func (s *Server) listenWithIO(ctx context.Context, stdin io.Reader, stdout io.Writer) error {
 	var cfg StartupConfig
 	if err := json.NewDecoder(stdin).Decode(&cfg); err != nil {
 		return fmt.Errorf("read startup config: %w", err)

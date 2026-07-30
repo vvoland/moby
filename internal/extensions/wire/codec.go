@@ -64,7 +64,7 @@ func (c *Contract) NewRequest(method string) (*dynamicpb.Message, any, error) {
 	if !ok {
 		return nil, nil, fmt.Errorf("wire: point %q has no method %q", c.PointID, method)
 	}
-	return dynamicpb.NewMessage(mp.reqDesc), reflect.New(mp.method.Request).Interface(), nil
+	return dynamicpb.NewMessage(mp.reqDesc), reflect.New(mp.m.Request).Interface(), nil
 }
 
 // NewResponse returns an empty protobuf message for a method's response, to

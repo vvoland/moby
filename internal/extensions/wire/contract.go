@@ -28,11 +28,11 @@ import (
 	"google.golang.org/protobuf/types/descriptorpb"
 )
 
-// Method is one RPC on a point: the Go method name and the Go types of its
+// method is one RPC on a point: the Go method name and the Go types of its
 // request and response. Response is nil for a method whose Go signature returns
 // only error, for which an empty response message is synthesized -- the same
 // shape the point's Go interface already has.
-type Method struct {
+type method struct {
 	Name     string
 	Request  reflect.Type
 	Response reflect.Type
@@ -49,7 +49,7 @@ type Contract struct {
 	// name on the wire is PointID + "." + Service.
 	Service string
 
-	methods []Method
+	methods []method
 	file    protoreflect.FileDescriptor
 	plans   map[reflect.Type]*msgPlan
 	// byMethod indexes the per-method descriptors used on the call path, so
@@ -60,7 +60,7 @@ type Contract struct {
 // methodPlan holds the descriptors a single RPC needs: the request and response
 // message descriptors the dynamic messages are built from.
 type methodPlan struct {
-	method   Method
+	m        method
 	reqDesc  protoreflect.MessageDescriptor
 	respDesc protoreflect.MessageDescriptor
 }
@@ -117,35 +117,36 @@ func NewContractFor(pointID, service string, iface reflect.Type) (*Contract, err
 	if iface.Kind() != reflect.Interface {
 		return nil, fmt.Errorf("point %q: %s is not an interface", pointID, iface)
 	}
-	methods := make([]Method, 0, iface.NumMethod())
+	methods := make([]method, 0, iface.NumMethod())
 	for i := 0; i < iface.NumMethod(); i++ {
 		m := iface.Method(i)
 		ft := m.Type
 		if ft.NumIn() != 2 || ft.In(0) != ctxType || ft.In(1).Kind() != reflect.Ptr {
 			return nil, fmt.Errorf("point %q method %s: want (context.Context, *Request)", pointID, m.Name)
 		}
-		method := Method{Name: m.Name, Request: ft.In(1).Elem()}
+		meth := method{Name: m.Name, Request: ft.In(1).Elem()}
 		switch {
 		case ft.NumOut() == 1 && ft.Out(0) == errType:
 			// A bare-error method; an empty response message is synthesized.
 		case ft.NumOut() == 2 && ft.Out(1) == errType && ft.Out(0).Kind() == reflect.Ptr:
-			method.Response = ft.Out(0).Elem()
+			meth.Response = ft.Out(0).Elem()
 		default:
 			return nil, fmt.Errorf("point %q method %s: result must be error or (*Response, error)", pointID, m.Name)
 		}
-		methods = append(methods, method)
+		methods = append(methods, meth)
 	}
-	return NewContract(pointID, service, methods)
+	return newContract(pointID, service, methods)
 }
 
-// NewContract derives the wire contract for a point from its methods. pointID is
+// newContract derives the wire contract for a point from its methods. pointID is
 // the point id (used as the proto package) and service is the gRPC service name
 // within it. It returns an error if any reachable message type uses a field
 // shape the wire format does not support.
 //
-// Most callers want [NewContractFor], which reads the methods off the point's
-// provider interface instead of taking them as data.
-func NewContract(pointID, service string, methods []Method) (*Contract, error) {
+// [NewContractFor] is the entry point; this takes the methods as data so that
+// one can be derived from an interface and the rest of the package needs only
+// one shape to work from.
+func newContract(pointID, service string, methods []method) (*Contract, error) {
 	c := &Contract{PointID: pointID, Service: service, methods: methods}
 
 	// Collect every message type reachable from the methods, in a stable order,
@@ -256,16 +257,13 @@ func NewContract(pointID, service string, methods []Method) (*Contract, error) {
 		if reqDesc == nil || respDesc == nil {
 			return nil, fmt.Errorf("method %q: request or response missing from built descriptor", m.Name)
 		}
-		c.byMethod[m.Name] = &methodPlan{method: m, reqDesc: reqDesc, respDesc: respDesc}
+		c.byMethod[m.Name] = &methodPlan{m: m, reqDesc: reqDesc, respDesc: respDesc}
 	}
 	return c, nil
 }
 
 // File returns the derived file descriptor.
 func (c *Contract) File() protoreflect.FileDescriptor { return c.file }
-
-// Methods returns the contract's methods.
-func (c *Contract) Methods() []Method { return c.methods }
 
 // FullMethod returns the gRPC path for a method, as it appears on the wire:
 // /<point-id>.<Service>/<Method>.
@@ -341,7 +339,7 @@ func describeMessage(pkg string, t reflect.Type) (*descriptorpb.DescriptorProto,
 		if err != nil {
 			return nil, fmt.Errorf("%s.%s: pb tag %q is not a number", t.Name(), f.Name, tag)
 		}
-		name := CamelToSnake(f.Name)
+		name := camelToSnake(f.Name)
 		fd := &descriptorpb.FieldDescriptorProto{
 			Name:     strPtr(name),
 			JsonName: strPtr(name),
@@ -368,7 +366,7 @@ func describeMessage(pkg string, t reflect.Type) (*descriptorpb.DescriptorProto,
 			// A proto3 map is sugar for a repeated nested entry message; the
 			// descriptor has to spell that out.
 			entry := &descriptorpb.DescriptorProto{
-				Name:    strPtr(SnakeToGoCamel(name) + "Entry"),
+				Name:    strPtr(snakeToGoCamel(name) + "Entry"),
 				Options: &descriptorpb.MessageOptions{MapEntry: boolPtr(true)},
 				Field: []*descriptorpb.FieldDescriptorProto{
 					{
@@ -468,7 +466,7 @@ func strPtr(s string) *string { return &s }
 func int32Ptr(v int32) *int32 { return &v }
 func boolPtr(v bool) *bool    { return &v }
 
-// CamelToSnake converts a Go field name to a proto3 snake_case field name,
+// camelToSnake converts a Go field name to a proto3 snake_case field name,
 // treating an initialism run as a single word: ContainerID -> container_id,
 // HTTPServer -> http_server, APIKey -> api_key. A word boundary is inserted
 // before an uppercase letter that either follows a lowercase or digit, or begins
@@ -477,7 +475,7 @@ func boolPtr(v bool) *bool    { return &v }
 // A lone trailing lowercase "s" is treated as a plural suffix on the acronym
 // rather than the start of a new word, so ContainerIDs -> container_ids and CPUs
 // -> cpus rather than container_i_ds / cp_us.
-func CamelToSnake(s string) string {
+func camelToSnake(s string) string {
 	r := []rune(s)
 	var b strings.Builder
 	for i, c := range r {
@@ -498,10 +496,10 @@ func CamelToSnake(s string) string {
 	return b.String()
 }
 
-// SnakeToGoCamel converts a snake_case proto field name to the CamelCase name
+// snakeToGoCamel converts a snake_case proto field name to the CamelCase name
 // protobuf uses for a synthesized map entry message (labels -> Labels,
 // port_bindings -> PortBindings).
-func SnakeToGoCamel(s string) string {
+func snakeToGoCamel(s string) string {
 	var b strings.Builder
 	for _, part := range strings.Split(s, "_") {
 		if part == "" {
@@ -512,23 +510,23 @@ func SnakeToGoCamel(s string) string {
 	return b.String()
 }
 
-func snake(s string) string { return CamelToSnake(s) }
+func snake(s string) string { return camelToSnake(s) }
 
-// PointDef is the part of an extension point that a wire contract is derived
+// pointDef is the part of an extension point that a wire contract is derived
 // from: its id, which is also the proto package, and its provider interface,
 // which supplies the methods and message types. [extensions.Point] satisfies it.
-type PointDef interface {
+type pointDef interface {
 	ID() extensions.PointID
 	Interface() reflect.Type
 }
 
-// MustContract derives the contract for a point, panicking if the point's Go
+// mustContract derives the contract for a point, panicking if the point's Go
 // types cannot be represented on the wire.
 //
 // It is meant for a package-scope variable in the point's own package, so a
 // contract this daemon cannot represent fails at build time, in the package that
 // owns the mistake, rather than when some extension first declares the point.
-func MustContract(p PointDef, service string) *Contract {
+func mustContract(p pointDef, service string) *Contract {
 	c, err := NewContractFor(string(p.ID()), service, p.Interface())
 	if err != nil {
 		panic(fmt.Sprintf("extensions/wire: point %q: %v", p.ID(), err))
