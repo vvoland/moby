@@ -199,3 +199,34 @@ func registeredDriver(t *testing.T, ctx context.Context, h *host.Host) volume.Dr
 	assert.NilError(t, err)
 	return d
 }
+
+// TestCreateReportsMountpoint is a regression test for `docker volume create`
+// returning an empty Mountpoint for the default driver.
+//
+// The API fills Mountpoint from CachedPath, which returns only what the volume
+// already knows. A driver built into the daemon knew its own path; one reached
+// through the driver store learns it from a Path call, and the volume returned
+// straight from Create had not made one -- so the field came back empty for
+// every `docker volume create` on the local driver.
+func TestCreateReportsMountpoint(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+
+	h, err := host.New(ctx, host.Options{
+		RuntimeDir: filepath.Join(root, "run"),
+		Extensions: []extensions.Extension{
+			volumelocal.Extension(filepath.Join(root, "volumes"), idtools.Identity{UID: os.Getuid(), GID: os.Getgid()}),
+		},
+	})
+	assert.NilError(t, err)
+	t.Cleanup(func() { assert.NilError(t, h.Shutdown(context.Background())) })
+
+	created, err := registeredDriver(t, ctx, h).Create("mountpointvol", nil)
+	assert.NilError(t, err)
+
+	// This is what daemon/volume/service.volumeToAPIType reads.
+	cp, ok := created.(interface{ CachedPath() string })
+	assert.Assert(t, ok, "%T does not expose CachedPath", created)
+	assert.Assert(t, cp.CachedPath() != "", "CachedPath is empty, so the API would report no Mountpoint")
+	assert.Check(t, is.Equal(cp.CachedPath(), created.Path()))
+}

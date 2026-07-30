@@ -28,11 +28,22 @@ func (a *volumeDriverAdapter) Create(name string, opts map[string]string) (volum
 	if err := a.proxy.Create(name, opts); err != nil {
 		return nil, err
 	}
+	// Ask for the mountpoint now. The driver protocol's Create answers with
+	// nothing, so without this the volume goes back to the caller with no path,
+	// and `docker volume create` reports an empty Mountpoint -- which is what a
+	// driver built into the daemon used to fill in for free.
+	mountpoint, err := a.proxy.Path(name)
+	if err != nil {
+		// Not worth failing a create that already succeeded; Path fills it in
+		// lazily on first use.
+		mountpoint = ""
+	}
 	return &volumeAdapter{
 		proxy:      a.proxy,
 		name:       name,
 		driverName: a.name,
 		scopePath:  a.scopePath,
+		eMount:     a.scopePath(mountpoint),
 	}, nil
 }
 
@@ -54,6 +65,11 @@ func (a *volumeDriverAdapter) List() ([]volume.Volume, error) {
 			scopePath:  a.scopePath,
 			driverName: a.name,
 			eMount:     a.scopePath(vp.Mountpoint),
+			// The listing already carries these. Copying them here is what keeps
+			// a listing one call: without them, asking each volume for its
+			// creation time sends the driver a Get per volume.
+			createdAt: vp.CreatedAt,
+			status:    vp.Status,
 		})
 	}
 	return out, nil
