@@ -46,6 +46,8 @@ type Codec struct {
 // NewCodec returns the hybrid codec wrapping gRPC's registered proto codec.
 func NewCodec() Codec { return Codec{CodecV2: encoding.GetCodecV2("proto")} }
 
+// Marshal passes an already-encoded frame through untouched and encodes anything
+// else with the embedded codec.
 func (c Codec) Marshal(v any) (mem.BufferSlice, error) {
 	if bs, ok := v.(mem.BufferSlice); ok {
 		bs.Ref() // gRPC frees the returned slice; keep the caller's reference intact.
@@ -54,6 +56,8 @@ func (c Codec) Marshal(v any) (mem.BufferSlice, error) {
 	return c.CodecV2.Marshal(v)
 }
 
+// Unmarshal hands the caller the raw frame when it asked for one, and otherwise
+// decodes with the embedded codec.
 func (c Codec) Unmarshal(data mem.BufferSlice, v any) error {
 	if dst, ok := v.(*mem.BufferSlice); ok {
 		data.Ref() // data is freed when Unmarshal returns; take our own reference.

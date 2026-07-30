@@ -35,6 +35,9 @@ const ExtensionID = "com.docker.mobyextension.nri.v1"
 // way without changing its logic.
 var Extension extensions.Extension = &Bridge{}
 
+// Declaration returns the bridge's extension declaration: it provides the
+// create-spec point, and starts and stops NRI adaptation with the extension
+// lifecycle.
 func (b *Bridge) Declaration() extensions.Declaration {
 	return extensions.Declaration{
 		ID:        ExtensionID,

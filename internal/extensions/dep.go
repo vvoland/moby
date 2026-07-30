@@ -97,6 +97,9 @@ func (d *Dep[T]) Optional() bool { return d.optional }
 // Lazy reports whether the dependency is resolved at use time.
 func (d *Dep[T]) Lazy() bool { return d.lazy }
 
+// Bind gives the handle the resolver it reads through. Only a host calls it,
+// and only for handles an extension declared, which is what leaves an undeclared
+// handle unusable.
 func (d *Dep[T]) Bind(r Resolver) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
