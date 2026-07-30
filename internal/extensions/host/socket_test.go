@@ -2,6 +2,8 @@ package host_test
 
 import (
 	"context"
+	greeterv0 "github.com/moby/moby/v2/internal/extensions/example/greeter/v0"
+	"github.com/moby/moby/v2/internal/extensions/wire"
 	"net"
 	"os/exec"
 	"path/filepath"
@@ -12,11 +14,9 @@ import (
 	"github.com/moby/moby/v2/integration/extension/testdata/greeter"
 	"github.com/moby/moby/v2/internal/extensions"
 	"github.com/moby/moby/v2/internal/extensions/clientpoint"
-	greeterpb "github.com/moby/moby/v2/internal/extensions/example/greeter/v0/protogen"
 	"github.com/moby/moby/v2/internal/extensions/grpcproxy"
 	"github.com/moby/moby/v2/internal/extensions/host"
 	echov1 "github.com/moby/moby/v2/internal/extensions/internal/launcher/echo/v1"
-	echopb "github.com/moby/moby/v2/internal/extensions/internal/launcher/echo/v1/protogen"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"gotest.tools/v3/assert"
@@ -84,9 +84,10 @@ func TestSocketExposure(t *testing.T) {
 	assert.NilError(t, err)
 	defer conn.Close()
 
-	resp, err := greeterpb.NewGreeterClient(conn).Greet(ctx, &greeterpb.HelloRequest{Name: "world"})
+	var resp greeterv0.HelloReply
+	err = wire.Invoke(ctx, conn, greeterv0.Contract, "Greet", &greeterv0.HelloRequest{Name: "world"}, &resp)
 	assert.NilError(t, err)
-	assert.Equal(t, resp.GetMessage(), "hello world")
+	assert.Equal(t, resp.Message, "hello world")
 }
 
 // TestHookOnlyServicesAreNotSocketExposed verifies the public-socket boundary:
@@ -123,10 +124,10 @@ func TestHookOnlyServicesAreNotSocketExposed(t *testing.T) {
 
 	conn, ok := h.Conn(id)
 	assert.Check(t, ok)
-	client := echopb.NewEchoClient(conn)
-	resp, err := client.Echo(ctx, &echopb.EchoRequest{Message: "private"})
+	var resp echov1.EchoResponse
+	err = wire.Invoke(ctx, conn, echov1.Contract, "Echo", &echov1.EchoRequest{Message: "private"}, &resp)
 	assert.NilError(t, err)
-	assert.Equal(t, resp.GetMessage(), "private")
+	assert.Equal(t, resp.Message, "private")
 }
 
 // TestInProcessServiceExposure verifies socket exposure works the same for an
@@ -162,7 +163,8 @@ func TestInProcessServiceExposure(t *testing.T) {
 	assert.NilError(t, err)
 	defer conn.Close()
 
-	resp, err := greeterpb.NewGreeterClient(conn).Greet(ctx, &greeterpb.HelloRequest{Name: "world"})
+	var resp greeterv0.HelloReply
+	err = wire.Invoke(ctx, conn, greeterv0.Contract, "Greet", &greeterv0.HelloRequest{Name: "world"}, &resp)
 	assert.NilError(t, err)
-	assert.Equal(t, resp.GetMessage(), "hello world")
+	assert.Equal(t, resp.Message, "hello world")
 }

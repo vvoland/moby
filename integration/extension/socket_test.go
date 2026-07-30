@@ -2,12 +2,13 @@ package extension
 
 import (
 	"context"
+	greeterv0 "github.com/moby/moby/v2/internal/extensions/example/greeter/v0"
+	"github.com/moby/moby/v2/internal/extensions/wire"
 	"os/exec"
 	"path/filepath"
 	"testing"
 
 	"github.com/moby/moby/v2/integration/extension/testdata/greeter"
-	greeterpb "github.com/moby/moby/v2/internal/extensions/example/greeter/v0/protogen"
 	"github.com/moby/moby/v2/internal/testutil"
 	"github.com/moby/moby/v2/internal/testutil/daemon"
 	"google.golang.org/grpc"
@@ -43,9 +44,10 @@ func TestSocketExposedGRPCService(t *testing.T) {
 	assert.NilError(t, err)
 	defer conn.Close()
 
-	resp, err := greeterpb.NewGreeterClient(conn).Greet(ctx, &greeterpb.HelloRequest{Name: "world"})
+	var resp greeterv0.HelloReply
+	err = wire.Invoke(ctx, conn, greeterv0.Contract, "Greet", &greeterv0.HelloRequest{Name: "world"}, &resp)
 	assert.NilError(t, err)
-	assert.Equal(t, resp.GetMessage(), "hello world")
+	assert.Equal(t, resp.Message, "hello world")
 }
 
 // buildGreeterExtension compiles the greeter fixture into an extensions
