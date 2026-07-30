@@ -32,8 +32,7 @@ import (
 // independently, so one slow provider cannot silently be skipped.
 //
 // It is plain Go: in-process providers implement it directly, and out-of-process
-// providers are reached through an adapter that satisfies it (see
-// [ClientProvider]).
+// providers are reached through an adapter that satisfies it (see [ClientPoint]).
 type Hook interface {
 	// CreateSpec returns the modified OCI runtime spec, or nil to leave it
 	// unchanged. Providers run in sequence, each receiving the spec as shaped by
@@ -45,8 +44,8 @@ type Hook interface {
 }
 
 // SpecRequest carries the container's OCI runtime spec and identity to a hook.
-// The pb struct tags are the proto field numbers -- the source of truth for wire
-// compatibility, and what the generator reads to emit the .proto and conversions.
+// The pb struct tags are the proto field numbers: they are the wire contract, so
+// a number may be changed or reused only as a deliberate break.
 type SpecRequest struct {
 	ContainerID string `pb:"1"`
 	Name        string `pb:"2"`
