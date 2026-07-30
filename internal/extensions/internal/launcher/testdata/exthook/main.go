@@ -38,7 +38,7 @@ func main() {
 		Providers: []extensions.Provider{echov1.Point.Provide(echo{})},
 	})
 	srv := sdk.NewServer()
-	if err := srv.Register(ext, echov1.ServerPoint); err != nil {
+	if err := srv.Register(ext, echov1.Wire.Server); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

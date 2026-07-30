@@ -28,7 +28,7 @@ const schemaFile = "create_spec_hook.proto"
 // something to do lightly: adding a field is compatible, renaming or renumbering
 // one is not.
 func TestSchemaMatchesContract(t *testing.T) {
-	got := createspecv0.Contract.Proto()
+	got := createspecv0.Wire.Contract.Proto()
 
 	if golden.FlagUpdate() {
 		assert.NilError(t, os.WriteFile(schemaFile, []byte(got), 0o644))

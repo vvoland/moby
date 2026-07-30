@@ -57,7 +57,7 @@ func TestOutOfProcessDependency(t *testing.T) {
 		Extensions: []extensions.Extension{greeter}, // in-process provider of the greeter point
 		Dirs:       []string{dir},                   // out-of-process dependent
 		// Offer the greeter point to launched extensions as a dependency.
-		DependencyProviders: []wire.ServerPoint{greeterv0.ServerPoint},
+		DependencyProviders: []wire.ServerPoint{greeterv0.Wire.Server},
 	})
 	assert.NilError(t, err) // greeterdep's Init called the dependency and validated the reply
 	defer func() { assert.NilError(t, h.Shutdown(context.Background())) }()

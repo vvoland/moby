@@ -91,7 +91,7 @@ func TestSocketExposure(t *testing.T) {
 	defer conn.Close()
 
 	var resp greeterv0.HelloReply
-	err = wire.Invoke(ctx, conn, greeterv0.Contract, "Greet", &greeterv0.HelloRequest{Name: "world"}, &resp)
+	err = wire.Invoke(ctx, conn, greeterv0.Wire.Contract, "Greet", &greeterv0.HelloRequest{Name: "world"}, &resp)
 	assert.NilError(t, err)
 	assert.Equal(t, resp.Message, "hello world")
 }
@@ -120,7 +120,7 @@ func TestHookOnlyServicesAreNotSocketExposed(t *testing.T) {
 	h, err := host.New(ctx, host.Options{
 		RuntimeDir:      t.TempDir(),
 		Dirs:            []string{dir},
-		ClientProviders: []wire.ClientPoint{echov1.ClientPoint},
+		ClientProviders: []wire.ClientPoint{echov1.Wire.Client},
 	})
 	assert.NilError(t, err)
 	defer func() { assert.NilError(t, h.Shutdown(context.Background())) }()
@@ -131,7 +131,7 @@ func TestHookOnlyServicesAreNotSocketExposed(t *testing.T) {
 	conn, ok := h.Conn(id)
 	assert.Check(t, ok)
 	var resp echov1.EchoResponse
-	err = wire.Invoke(ctx, conn, echov1.Contract, "Echo", &echov1.EchoRequest{Message: "private"}, &resp)
+	err = wire.Invoke(ctx, conn, echov1.Wire.Contract, "Echo", &echov1.EchoRequest{Message: "private"}, &resp)
 	assert.NilError(t, err)
 	assert.Equal(t, resp.Message, "private")
 }
@@ -170,7 +170,7 @@ func TestInProcessServiceExposure(t *testing.T) {
 	defer conn.Close()
 
 	var resp greeterv0.HelloReply
-	err = wire.Invoke(ctx, conn, greeterv0.Contract, "Greet", &greeterv0.HelloRequest{Name: "world"}, &resp)
+	err = wire.Invoke(ctx, conn, greeterv0.Wire.Contract, "Greet", &greeterv0.HelloRequest{Name: "world"}, &resp)
 	assert.NilError(t, err)
 	assert.Equal(t, resp.Message, "hello world")
 }

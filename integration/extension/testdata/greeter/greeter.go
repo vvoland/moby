@@ -33,7 +33,7 @@ func (greeter) Greet(_ context.Context, req *greeterv0.HelloRequest) (*greeterv0
 type expose struct{}
 
 func (expose) RegisterServices(r grpc.ServiceRegistrar) {
-	greeterv0.ServerPoint.Serve(r, greeter{})
+	greeterv0.Wire.Server.Serve(r, greeter{})
 }
 
 // Extension implements only the service.grpc point, so the daemon treats the

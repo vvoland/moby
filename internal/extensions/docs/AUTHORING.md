@@ -158,23 +158,16 @@ Create `wire.go` next to the contract. It derives the contract and exposes the
 registrations a host and an SDK need:
 
 ```go
-// Contract is the point's wire form, derived from the Go interface.
-var Contract = wire.MustContract(Point, "<Service>")
-
-var ServerPoint = wire.ServerPoint{
-	Point: Point.ID(),
-	Serve: func(r grpc.ServiceRegistrar, impl any) error { return wire.Serve(r, Contract, impl) },
-}
-
-var ClientPoint = wire.ClientPoint{
-	Point:    Point.ID(),
-	Build: func(conn grpc.ClientConnInterface) extensions.Provider { return Point.Provide(client{conn}) },
-}
+// Wire is the point's contract and both sides of its gRPC wiring.
+var Wire = wire.Bind(Point, "<Service>", func(conn grpc.ClientConnInterface) <Iface> {
+	return client{conn}
+})
 ```
 
 Then write the client adapter: one method per point method, each a single
-`wire.Invoke` call. This is the only part of a point that is not derived, because
-Go can build a function at runtime but not a value implementing an interface.
+`wire.Invoke` call. That is the only hand-written part of a point, and it exists
+because Go can build a function at runtime but not a value implementing an
+interface.
 
 It is written out rather than generated because the compiler already enforces
 what a generator would: the adapter has to satisfy the point's interface, so a

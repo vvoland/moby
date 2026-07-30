@@ -25,7 +25,7 @@ func main() {
 	}
 	// The greeter point is a dependency: register its client wiring so the
 	// resolver Init receives can call it over the callback channel.
-	srv.Depends(greeterv0.ClientPoint)
+	srv.Depends(greeterv0.Wire.Client)
 	if err := srv.Listen(ctx); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

@@ -45,7 +45,7 @@ func TestSocketExposedGRPCService(t *testing.T) {
 	defer conn.Close()
 
 	var resp greeterv0.HelloReply
-	err = wire.Invoke(ctx, conn, greeterv0.Contract, "Greet", &greeterv0.HelloRequest{Name: "world"}, &resp)
+	err = wire.Invoke(ctx, conn, greeterv0.Wire.Contract, "Greet", &greeterv0.HelloRequest{Name: "world"}, &resp)
 	assert.NilError(t, err)
 	assert.Equal(t, resp.Message, "hello world")
 }

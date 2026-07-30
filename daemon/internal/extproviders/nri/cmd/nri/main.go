@@ -27,7 +27,7 @@ func main() {
 	defer stop()
 
 	srv := sdk.NewServer()
-	if err := srv.Register(nri.Extension, createspecv0.ServerPoint); err != nil {
+	if err := srv.Register(nri.Extension, createspecv0.Wire.Server); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

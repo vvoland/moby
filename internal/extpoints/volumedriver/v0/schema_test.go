@@ -15,7 +15,7 @@ const schemaFile = "volume_driver.proto"
 // contract, so a driver author generating stubs from it gets stubs that work.
 // Re-run with -update after an intentional contract change.
 func TestSchemaMatchesContract(t *testing.T) {
-	got := volumedriverv0.Contract.Proto()
+	got := volumedriverv0.Wire.Contract.Proto()
 	if golden.FlagUpdate() {
 		assert.NilError(t, os.WriteFile(schemaFile, []byte(got), 0o644))
 		return

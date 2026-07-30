@@ -102,8 +102,8 @@ func defaultExtensionDir() (string, error) {
 // extension serving the point.
 func clientProviders() []wire.ClientPoint {
 	return []wire.ClientPoint{
-		createspecv0.ClientPoint,
-		volumedriverv0.ClientPoint,
+		createspecv0.Wire.Client,
+		volumedriverv0.Wire.Client,
 	}
 }
 
