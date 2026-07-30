@@ -7,7 +7,7 @@ For authoring steps, see [AUTHORING.md](./AUTHORING.md).
 For examples, see [EXAMPLES.md](./EXAMPLES.md).
 
 This describes current behavior.
-Runtime reload, out-of-process health handling, and scoped dependency resolvers are future work in [ROADMAP.md](./ROADMAP.md).
+Runtime reload and out-of-process health handling are future work in [ROADMAP.md](./ROADMAP.md).
 
 ## Requirements
 

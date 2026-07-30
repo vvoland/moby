@@ -210,6 +210,13 @@ func serveCallback(endpoint string, deps []serverpoint.Registration, b *broker.B
 			return nil, fmt.Errorf("dependency point %q offered on the callback has %d providers; exactly one is required", dep.Point, len(providers))
 		}
 	}
+	// The runtime dir is otherwise created only when a binary is launched, so a
+	// host that offers dependencies but launches nothing -- every extension
+	// built in, or none installed -- would bind into a directory that does not
+	// exist and fail to start.
+	if err := os.MkdirAll(filepath.Dir(endpoint), 0o700); err != nil {
+		return nil, fmt.Errorf("create extension runtime dir: %w", err)
+	}
 	if err := os.Remove(endpoint); err != nil && !os.IsNotExist(err) {
 		return nil, fmt.Errorf("remove stale dependency callback socket: %w", err)
 	}

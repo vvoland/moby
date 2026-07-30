@@ -9,11 +9,10 @@ The current interfaces are shaped so these features can be added later without c
   It would also need a safe way to stop consumers from calling a removed provider.
   The first tool is resolving providers at use time.
   Broker-owned invalidatable references should only be added if that is not enough.
-- **Dependency-scoped resolvers.**
-  Resolution works today, but an extension's `Init` receives the whole broker as its resolver.
-  It is not yet limited to the dependencies the extension declared.
-  Cross-process dependencies also resolve to one provider today.
-  `All` and by-id selection across that boundary are future work.
+- **Fan-out and by-id dependencies across the process boundary.**
+  A dependency handle resolves to a single provider when it is bound to the
+  callback channel, so `All` and by-id selection work in process but not yet
+  from a launched extension.
 - **Health check, reconnect, and restart.**
   A launched extension is connected once.
   If the process dies, callers get gRPC errors until the daemon restarts.

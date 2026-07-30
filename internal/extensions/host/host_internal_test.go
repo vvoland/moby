@@ -155,3 +155,32 @@ func TestServeCallback(t *testing.T) {
 		assert.Equal(t, len(served), 0)
 	})
 }
+
+// TestServeCallbackCreatesRuntimeDir covers a host that offers dependencies but
+// launches nothing -- every extension built in, or none installed.
+//
+// The runtime directory is otherwise created only as a side effect of launching
+// a binary, so the callback socket was bound into a directory that did not
+// exist and the host failed to start. Nothing shipped could reach it only
+// because the daemon offers no dependency points yet; the first one added would
+// have.
+func TestServeCallbackCreatesRuntimeDir(t *testing.T) {
+	const dep = extensions.PointID("org.mobyproject.extension.dep.v1")
+
+	b := broker.New()
+	assert.NilError(t, b.Register(extensions.New(extensions.Declaration{
+		ID:        "org.example.provider.v1",
+		Providers: []extensions.Provider{{Point: dep, Impl: struct{}{}}},
+	})))
+
+	// A path under a directory that does not exist, as RuntimeDir is before
+	// anything is launched.
+	endpoint := filepath.Join(t.TempDir(), "never-created", "callback.sock")
+	srv, err := serveCallback(endpoint, []serverpoint.Registration{{
+		Point:    dep,
+		Register: func(grpc.ServiceRegistrar, any) error { return nil },
+	}}, b)
+	assert.NilError(t, err)
+	assert.Assert(t, srv != nil)
+	srv.Stop()
+}

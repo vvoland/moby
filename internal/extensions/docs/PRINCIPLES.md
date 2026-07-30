@@ -19,12 +19,12 @@
 - **Extensions do not depend on their location.**
   Extension code should not care whether it is compiled into the daemon or runs as a separate process.
   The runtime owns the transport choice.
-- **Dependencies are typed.**
-  An extension declares what it needs by point or by extension id.
-  The broker resolves those needs before initialization.
-  A point dependency lets the extension fetch providers later.
-  An extension dependency gives it one named extension, initialized first.
-  Both in-process and out-of-process extensions receive a resolver they can use to call dependencies.
+- **Dependencies are typed handles.**
+  A dependency is created from the point it depends on and listed in the extension's declaration.
+  Listing it is what binds it, so an extension cannot reach a point it did not declare.
+  `Init` receives no resolver, which makes that a structural property rather than a rule.
+  A required or optional dependency also orders its providers first; a lazy one does not, which is what lets subsystems that refer to each other be split apart.
+  The same handle works in a launched extension, bound to a callback channel to the daemon instead of to the broker.
 - **Broker plus dependency injection.**
   Like containerd, extensions register, declare dependencies, and initialize in dependency order.
   Unlike containerd, those dependencies can point to out-of-process extensions without changing the caller.

@@ -49,28 +49,50 @@ func Drivers(ctx context.Context, r extensions.Resolver) ([]volume.Driver, error
 	return out, nil
 }
 
+// Call deadlines, matching what the legacy volume plugin path applies. A driver
+// reached over gRPC is a separate process that can stop answering, and without a
+// deadline the call -- and the volume operation waiting on it -- would hang for
+// as long as the daemon runs.
+const (
+	longTimeout  = 2 * time.Minute
+	shortTimeout = 1 * time.Minute
+)
+
 // pointDriver presents a volume driver point provider as the flat driver
 // contract the volume service consumes, so an extension-provided driver and a
 // legacy plugin reach exactly the same code below this line.
 //
 // The flat contract predates contexts, so the daemon's lifetime context is
-// carried here. It bounds a call to the daemon running rather than to any one
-// request.
+// carried here and each call takes its deadline from it. That is weaker than a
+// request-scoped context -- cancelling a request does not cancel the driver call
+// -- but it matches the guarantee the legacy plugin path gives, and bounding the
+// call is the part that keeps a wedged driver from wedging the daemon.
 type pointDriver struct {
 	ctx    context.Context
 	driver volumedriverv0.Driver
 }
 
+// call bounds one driver call.
+func (p *pointDriver) call(timeout time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(p.ctx, timeout)
+}
+
 func (p *pointDriver) Create(name string, options map[string]string) error {
-	return p.driver.Create(p.ctx, &volumedriverv0.CreateRequest{Name: name, Options: options})
+	ctx, cancel := p.call(longTimeout)
+	defer cancel()
+	return p.driver.Create(ctx, &volumedriverv0.CreateRequest{Name: name, Options: options})
 }
 
 func (p *pointDriver) Remove(name string) error {
-	return p.driver.Remove(p.ctx, &volumedriverv0.NameRequest{Name: name})
+	ctx, cancel := p.call(shortTimeout)
+	defer cancel()
+	return p.driver.Remove(ctx, &volumedriverv0.NameRequest{Name: name})
 }
 
 func (p *pointDriver) Path(name string) (string, error) {
-	resp, err := p.driver.Path(p.ctx, &volumedriverv0.NameRequest{Name: name})
+	ctx, cancel := p.call(shortTimeout)
+	defer cancel()
+	resp, err := p.driver.Path(ctx, &volumedriverv0.NameRequest{Name: name})
 	if err != nil {
 		return "", err
 	}
@@ -78,7 +100,9 @@ func (p *pointDriver) Path(name string) (string, error) {
 }
 
 func (p *pointDriver) Mount(name, ref string) (string, error) {
-	resp, err := p.driver.Mount(p.ctx, &volumedriverv0.MountRequest{Name: name, Ref: ref})
+	ctx, cancel := p.call(longTimeout)
+	defer cancel()
+	resp, err := p.driver.Mount(ctx, &volumedriverv0.MountRequest{Name: name, Ref: ref})
 	if err != nil {
 		return "", err
 	}
@@ -86,15 +110,21 @@ func (p *pointDriver) Mount(name, ref string) (string, error) {
 }
 
 func (p *pointDriver) Unmount(name, ref string) error {
-	return p.driver.Unmount(p.ctx, &volumedriverv0.MountRequest{Name: name, Ref: ref})
+	ctx, cancel := p.call(shortTimeout)
+	defer cancel()
+	return p.driver.Unmount(ctx, &volumedriverv0.MountRequest{Name: name, Ref: ref})
 }
 
 func (p *pointDriver) LiveRestore(name, ref string) error {
-	return p.driver.LiveRestore(p.ctx, &volumedriverv0.MountRequest{Name: name, Ref: ref})
+	ctx, cancel := p.call(shortTimeout)
+	defer cancel()
+	return p.driver.LiveRestore(ctx, &volumedriverv0.MountRequest{Name: name, Ref: ref})
 }
 
 func (p *pointDriver) List() ([]drivers.VolumeInfo, error) {
-	resp, err := p.driver.List(p.ctx, &volumedriverv0.ListRequest{})
+	ctx, cancel := p.call(shortTimeout)
+	defer cancel()
+	resp, err := p.driver.List(ctx, &volumedriverv0.ListRequest{})
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +140,9 @@ func (p *pointDriver) List() ([]drivers.VolumeInfo, error) {
 }
 
 func (p *pointDriver) Get(name string) (*drivers.VolumeInfo, error) {
-	resp, err := p.driver.Get(p.ctx, &volumedriverv0.NameRequest{Name: name})
+	ctx, cancel := p.call(shortTimeout)
+	defer cancel()
+	resp, err := p.driver.Get(ctx, &volumedriverv0.NameRequest{Name: name})
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +153,9 @@ func (p *pointDriver) Get(name string) (*drivers.VolumeInfo, error) {
 }
 
 func (p *pointDriver) Capabilities() (volume.Capability, error) {
-	resp, err := p.driver.Capabilities(p.ctx, &volumedriverv0.CapabilitiesRequest{})
+	ctx, cancel := p.call(shortTimeout)
+	defer cancel()
+	resp, err := p.driver.Capabilities(ctx, &volumedriverv0.CapabilitiesRequest{})
 	if err != nil {
 		return volume.Capability{}, err
 	}

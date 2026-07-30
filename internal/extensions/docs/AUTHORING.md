@@ -11,7 +11,6 @@ For examples, read [EXAMPLES.md](./EXAMPLES.md).
 
 Use the real points in `internal/extpoints/` as references.
 `createspec/v0` is a real engine hook.
-`containercreate/v0` is another engine point.
 `internal/extensions/servicegrpc/v0` is the standard socket-exposure point used by the SDK and host.
 `internal/extensions/example/greeter/v0` is a small service point used by tests.
 
@@ -229,8 +228,7 @@ To allow out-of-process providers, add the generated `ClientPoint` to `clientPro
 ```go
 func clientProviders() []clientpoint.Registration {
 	return []clientpoint.Registration{
-		containercreatepb.ClientPoint,
-		createspecpb.ClientPoint,
+		createspecv0.ClientPoint,
 		<name>pb.ClientPoint, // add this
 	}
 }
@@ -439,7 +437,7 @@ must declare the client wiring for the points it will call:
 ```go
 srv := sdk.NewServer()
 srv.Register(ext)
-srv.Depends(volumedriverpb.ClientPoint) // one per dependency point it will call
+srv.Depends(volumedriverv0.ClientPoint) // one per dependency point it will call
 srv.Listen(ctx)
 ```
 
@@ -489,7 +487,7 @@ func main() {
 	defer stop()
 
 	srv := sdk.NewServer()
-	if err := srv.Register(myext.Extension, createspecpb.ServerPoint); err != nil {
+	if err := srv.Register(myext.Extension, createspecv0.ServerPoint); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
