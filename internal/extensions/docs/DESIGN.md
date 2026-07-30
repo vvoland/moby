@@ -81,9 +81,9 @@ Runtime reload, out-of-process health handling, and scoped dependency resolvers 
   In-process extensions call the provider directly.
   Out-of-process extensions call back to the daemon over a callback channel, and the daemon routes the call to the real provider.
 - Out-of-process providers use gRPC.
-  The `.proto` file is generated from the point's Go contract.
-  In-process providers implement the Go interface directly.
-  For out-of-process providers, a generated client adapter presents the same Go interface and converts to and from proto messages.
+  The protobuf descriptors are derived from the point's Go contract at runtime, and a `.proto` is rendered from them for authors working in other languages.
+  In-process providers implement the Go interface directly and are called directly; nothing is marshalled.
+  For out-of-process providers, a small hand-written client adapter presents the same Go interface, and the framework does the conversion.
 - The lifecycle is register, resolve, init, run, and shutdown.
   Errors are reported per extension.
   The extension set is fixed at daemon start.
@@ -156,7 +156,7 @@ The administrator evaluates that risk by controlling what is installed and by in
 ## Assumptions
 
 - A point is a Go interface plus message types.
-  Its `.proto` file and wire adapters are generated from them.
+  Its wire form is derived from them; nothing is generated.
   The point id names the contract.
 - Transport is an engine assembly choice.
   A call can be in-process or gRPC without changing the point interface.

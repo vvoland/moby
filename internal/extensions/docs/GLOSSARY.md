@@ -9,7 +9,7 @@ For example: `org.mobyproject.extension.volume.driver.v1`.
 
 A point is defined by the engine or by an extension.
 Its source is a Go interface and Go message types.
-The `.proto` file used across the process boundary is generated from that Go contract.
+The wire form used across the process boundary is derived from that Go contract, and a `.proto` is rendered from it for authors working in other languages.
 
 A breaking change creates a new point version.
 

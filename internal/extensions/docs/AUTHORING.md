@@ -18,22 +18,31 @@ Use the real points in `extpoints/` as references.
 ## The shape of a point on disk
 
 A point lives in `extpoints/<area>/<name>/v<N>/`.
-It has one hand-written Go contract, one hand-written generate file, and generated wire files.
+It is all hand-written Go; nothing about a point is generated.
 
 ```
 extpoints/createspec/v0/
-  createspec.go              # you write: interface, messages, Point, helpers
-  gen.go                     # you write: package doc and //go:generate
-  protogen/                  # generated, do not edit
-    create_spec_hook.proto   # generated from the Go contract
-    *.pb.go                  # generated proto messages
-    *_grpc.pb.go             # generated gRPC stubs
-    wire.gen.go              # generated ClientPoint, ServerPoint, adapters
+  createspec.go              # interface, messages, Point, helpers
+  wire.go                    # Contract, ClientPoint, ServerPoint, client adapter
+  create_spec_hook.proto     # the published schema, rendered from the contract
+  schema_test.go             # keeps the .proto in step with the Go types
 ```
 
-The Go file is the source of truth.
-Do not hand-edit the `.proto` file or anything in `protogen/`.
-"Go-first" means a maintainer writes an ordinary Go interface, and the wire format is generated from it.
+The Go file is the source of truth. "Go-first" means a maintainer writes an
+ordinary Go interface, and the wire format is *derived from it at runtime* --
+the protobuf descriptors are built from the interface and its `pb:"N"`-tagged
+structs when the point is registered, and values are marshalled against those
+descriptors.
+
+The bytes are exactly what `protoc` would have produced, which
+`internal/extensions/wire` tests against real generated code in both directions.
+So the traffic is ordinary gRPC with the standard `application/grpc+proto`
+content type, and an extension written in another language generates stubs from
+the published `.proto` and talks to the daemon normally.
+
+The `.proto` is documentation, not a build input -- nothing in the daemon reads
+it. Do not hand-edit it; it is rendered from the contract and a test fails if the
+two drift.
 
 ## Adding a new extension point
 
@@ -144,39 +153,46 @@ For points that the engine offers to extensions, such as socket exposure or info
 Only the caller direction changes.
 See the standard points in [EXAMPLES.md](./EXAMPLES.md#standard-points).
 
-### 2. Add the generate directive
+### 2. Add the wire wiring
 
-Create `gen.go` next to the contract.
-It contains the package doc and the `//go:generate` line.
-Copy an existing file and change the `-dir`, `-import`, and `-proto` paths.
+Create `wire.go` next to the contract. It derives the contract and exposes the
+registrations a host and an SDK need:
 
 ```go
-//go:generate bash -c "cd ../../.. && go run ./internal/extensions/cmd/mobyextgen -dir extpoints/<area>/<name>/v0 -import github.com/moby/moby/v2/extpoints/<area>/<name>/v0 -proto <name>.proto && protoc --go_out=. --go_opt=module=github.com/moby/moby/v2 --go-grpc_out=. --go-grpc_opt=module=github.com/moby/moby/v2 -I . extpoints/<area>/<name>/v0/<name>.proto"
+// Contract is the point's wire form, derived from the Go interface.
+var Contract = wire.MustContract(Point, "<Service>")
 
-// Package <name>v0 is the <name> extension point contract, written Go-first ...
-package <name>v0
+var ServerPoint = serverpoint.Registration{
+	Point:    Point.ID(),
+	Register: func(r grpc.ServiceRegistrar, impl any) error { return wire.Serve(r, Contract, impl) },
+}
+
+var ClientPoint = clientpoint.Registration{
+	Point:    Point.ID(),
+	Provider: func(conn grpc.ClientConnInterface) extensions.Provider { return Point.Provide(client{conn}) },
+}
 ```
 
-`mobyextgen` reads the Go contract and writes the `.proto` file plus `wire.gen.go`.
-`protoc` then writes the proto messages and gRPC stubs.
-The contract package itself does not import protobuf packages.
-Generated code goes in `protogen/`.
+Then write the client adapter: one method per point method, each a single
+`wire.Invoke` call. This is the only part of a point that is not derived, because
+Go can build a function at runtime but not a value implementing an interface.
 
-### 3. Generate
+It is written out rather than generated because the compiler already enforces
+what a generator would: the adapter has to satisfy the point's interface, so a
+method added to the point fails the build here instead of silently going uncalled
+across the process boundary.
 
-Run generation through the pinned toolchain:
+### 3. Publish the schema
+
+Add a `schema_test.go` that compares `Contract.Proto()` against the `.proto` in
+the package, and generate it once:
 
 ```console
-$ make generate-extensions
+$ go test ./extpoints/<area>/<name>/v0/ -update
 ```
 
-This runs in Docker with the `protoc` and plugin versions used by the repo.
-It copies generated files back into the tree.
-CI runs `make validate-generate-extensions` and fails if committed generated files do not match a fresh run.
-Always commit generated output.
-
-You can iterate on one package with `go generate ./extpoints/<area>/<name>/v0/`, but that requires `protoc` and plugins on your `PATH`.
-The make target is the reproducible path.
+There is no build step, no `protoc`, and no Docker image. The test fails if the
+Go contract and the published schema ever drift.
 
 ### 4. Call the point from an engine flow
 
@@ -466,7 +482,7 @@ Health checks, reconnect, and restart are future work in [ROADMAP.md](./ROADMAP.
 |---|---|---|
 | Define a point | `extpoints/<area>/<name>/v0/<name>.go` | Go interface, `pb`-tagged messages, `DefinePoint`, and helpers |
 | Wire the point | `extpoints/<area>/<name>/v0/gen.go` | package doc and `//go:generate` |
-| Generate | `make generate-extensions` | regenerate `protogen/`; CI validates the result |
+| Publish schema | `go test ./extpoints/<area>/<name>/v0/ -update` | re-render the point's `.proto` from its Go contract |
 | Invoke the point | the relevant engine flow | call the contract helper with the host as `Resolver` |
 | Support out-of-process | `daemon/extensions.go` → `clientProviders()` | add `<name>pb.ClientPoint` |
 | Write an extension | anywhere | use `extensions.New(Declaration{…})` or implement `Extension` |
