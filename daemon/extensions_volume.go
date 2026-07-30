@@ -3,7 +3,7 @@
 package daemon
 
 import (
-	"github.com/moby/moby/v2/daemon/extproviders/volumelocal"
+	"github.com/moby/moby/v2/daemon/internal/extproviders/volumelocal"
 	"github.com/moby/moby/v2/daemon/internal/idtools"
 	"github.com/moby/moby/v2/internal/extensions"
 )

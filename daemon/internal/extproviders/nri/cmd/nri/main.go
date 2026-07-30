@@ -17,7 +17,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/moby/moby/v2/daemon/extproviders/nri"
+	"github.com/moby/moby/v2/daemon/internal/extproviders/nri"
 	"github.com/moby/moby/v2/internal/extensions/sdk"
 	createspecv0 "github.com/moby/moby/v2/internal/extpoints/createspec/v0"
 )

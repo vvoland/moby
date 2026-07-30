@@ -179,7 +179,7 @@ func (daemon *Daemon) ExposeExtensionServices(gs *grpc.Server, routes *grpcproxy
 // active set is exactly this list, and config reaches each one by id through
 // host.Options.ExtensionConfig.
 //
-// It is currently empty. NRI ([github.com/moby/moby/v2/daemon/extproviders/nri]
+// It is currently empty. NRI ([github.com/moby/moby/v2/daemon/internal/extproviders/nri]
 // .Extension) is the obvious first built-in, but it stays on the legacy
 // daemon/internal/nri path for now: its create-spec bridge does not yet deliver
 // container lifecycle events or state sync to plugins, exposes neither `docker

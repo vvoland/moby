@@ -2,6 +2,7 @@ package volumelocal_test
 
 import (
 	"context"
+	"github.com/moby/moby/v2/daemon/internal/volumeext"
 	"github.com/moby/moby/v2/daemon/volume"
 	"github.com/moby/moby/v2/daemon/volume/drivers"
 	"net"
@@ -9,7 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/moby/moby/v2/daemon/extproviders/volumelocal"
+	"github.com/moby/moby/v2/daemon/internal/extproviders/volumelocal"
 	"github.com/moby/moby/v2/daemon/internal/idtools"
 	"github.com/moby/moby/v2/internal/extensions"
 	"github.com/moby/moby/v2/internal/extensions/host"
@@ -142,11 +143,7 @@ func TestLiveRestoreSurvivesTheAdapter(t *testing.T) {
 	assert.NilError(t, err)
 	t.Cleanup(func() { assert.NilError(t, h.Shutdown(context.Background())) })
 
-	store := drivers.NewStore(nil)
-	assert.NilError(t, store.RegisterExtensions(ctx, h))
-
-	d, err := store.GetDriver(volumelocal.DriverName)
-	assert.NilError(t, err)
+	d := registeredDriver(t, ctx, h)
 
 	created, err := d.Create("restored", nil)
 	assert.NilError(t, err)
@@ -178,10 +175,7 @@ func TestCreatedAtSurvivesTheAdapter(t *testing.T) {
 	assert.NilError(t, err)
 	t.Cleanup(func() { assert.NilError(t, h.Shutdown(context.Background())) })
 
-	store := drivers.NewStore(nil)
-	assert.NilError(t, store.RegisterExtensions(ctx, h))
-	d, err := store.GetDriver(volumelocal.DriverName)
-	assert.NilError(t, err)
+	d := registeredDriver(t, ctx, h)
 
 	created, err := d.Create("createdatvol", nil)
 	assert.NilError(t, err)
@@ -189,4 +183,19 @@ func TestCreatedAtSurvivesTheAdapter(t *testing.T) {
 	at, err := created.CreatedAt()
 	assert.NilError(t, err)
 	assert.Assert(t, !at.IsZero(), "CreatedAt is the zero time, so the API would report 0001-01-01T00:00:00Z")
+}
+
+// registeredDriver resolves the local driver from h and registers it with a
+// driver store, which is the path the daemon takes.
+func registeredDriver(t *testing.T, ctx context.Context, h *host.Host) volume.Driver {
+	t.Helper()
+	ds, err := volumeext.Drivers(ctx, h)
+	assert.NilError(t, err)
+	assert.Assert(t, len(ds) == 1)
+
+	store := drivers.NewStore(nil)
+	assert.Assert(t, store.Register(ds[0], volumelocal.DriverName))
+	d, err := store.GetDriver(volumelocal.DriverName)
+	assert.NilError(t, err)
+	return d
 }

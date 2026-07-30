@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"github.com/moby/moby/v2/daemon/internal/volumeext"
 	"github.com/moby/moby/v2/internal/extensions/host"
 	"net/netip"
 	"os"
@@ -129,7 +130,12 @@ func initDaemonWithVolumeStore(tmp string) (*Daemon, error) {
 	if err != nil {
 		return nil, err
 	}
-	daemon.volumes, err = volumesservice.NewVolumeService(ctx, tmp, nil, rootIdentity, daemon, h)
+	extDrivers, err := volumeext.Drivers(ctx, h)
+	if err != nil {
+		return nil, err
+	}
+	daemon.volumes, err = volumesservice.NewVolumeService(tmp, nil, rootIdentity, daemon,
+		volumesservice.WithDrivers(extDrivers...))
 	if err != nil {
 		return nil, err
 	}

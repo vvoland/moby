@@ -10,6 +10,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
+	"github.com/moby/moby/v2/daemon/internal/volumeext"
 	"maps"
 	"net"
 	"net/netip"
@@ -1094,7 +1095,12 @@ func NewDaemon(ctx context.Context, config *config.Config, pluginStore *plugin.S
 	}
 	log.G(ctx).Debugf("Using default logging driver %s", d.defaultLogConfig.Type)
 
-	d.volumes, err = volumesservice.NewVolumeService(ctx, cfgStore.Root, d.PluginStore, idtools.Identity{UID: uid, GID: gid}, d, d.extensionHost)
+	extVolumeDrivers, err := volumeext.Drivers(ctx, d.extensionHost)
+	if err != nil {
+		return nil, err
+	}
+	d.volumes, err = volumesservice.NewVolumeService(cfgStore.Root, d.PluginStore, idtools.Identity{UID: uid, GID: gid}, d,
+		volumesservice.WithDrivers(extVolumeDrivers...))
 	if err != nil {
 		return nil, err
 	}

@@ -16,7 +16,6 @@ import (
 	"github.com/moby/moby/v2/daemon/volume/drivers"
 	"github.com/moby/moby/v2/daemon/volume/service/opts"
 	"github.com/moby/moby/v2/errdefs"
-	"github.com/moby/moby/v2/internal/extensions"
 	"github.com/moby/moby/v2/pkg/plugingetter"
 	"github.com/pkg/errors"
 )
@@ -40,17 +39,30 @@ type VolumesService struct {
 	eventLogger  VolumeEventLogger
 }
 
+// Option configures a [VolumesService].
+type Option func(*serviceOptions)
+
+type serviceOptions struct {
+	drivers []volume.Driver
+}
+
+// WithDrivers registers volume drivers with the service, in addition to the
+// legacy plugin path it discovers on its own. The built-in local driver arrives
+// this way, as does any driver provided by an extension.
+func WithDrivers(ds ...volume.Driver) Option {
+	return func(o *serviceOptions) { o.drivers = append(o.drivers, ds...) }
+}
+
 // NewVolumeService creates a new volume service.
-//
-// resolver supplies the volume drivers provided as extensions, including the
-// built-in local driver. It may be nil, in which case the service starts with
-// no drivers but the legacy plugin path -- which is what a test that registers
-// its own driver wants.
-func NewVolumeService(ctx context.Context, root string, pg plugingetter.PluginGetter, rootIDs idtools.Identity, logger VolumeEventLogger, resolver extensions.Resolver) (*VolumesService, error) {
+func NewVolumeService(root string, pg plugingetter.PluginGetter, rootIDs idtools.Identity, logger VolumeEventLogger, opts ...Option) (*VolumesService, error) {
+	var cfg serviceOptions
+	for _, o := range opts {
+		o(&cfg)
+	}
 	ds := drivers.NewStore(pg)
-	if resolver != nil {
-		if err := ds.RegisterExtensions(ctx, resolver); err != nil {
-			return nil, err
+	for _, d := range cfg.drivers {
+		if !ds.Register(d, d.Name()) {
+			return nil, errors.Errorf("volume driver %q could not be registered", d.Name())
 		}
 	}
 
