@@ -380,14 +380,61 @@ func (b *Bridge) Declaration() extensions.Declaration {
 }
 ```
 
-`Init` receives the extension config and a resolver.
-The config is keyed by extension id in `daemon.json`.
-The resolver gives access to declared dependencies.
-Declare dependencies and conflicts in the `Declaration`.
-The broker initializes dependencies before dependents.
+`Init` receives the extension config, keyed by extension id in `daemon.json`.
+It receives no resolver: everything an extension may reach is a dependency it
+declared, and a declared dependency is a typed handle it already holds.
 
-For out-of-process extensions, the resolver calls dependencies through the daemon over a callback channel.
-The binary must declare the client wiring for dependency points:
+### Dependencies
+
+A dependency is created from the point it depends on, kept on the extension, and
+listed in the declaration. Listing it is what binds it, so a handle the
+declaration omits stays unusable -- an extension cannot reach a point it did not
+declare.
+
+```go
+type Bridge struct {
+	volumes *extensions.Dep[volumedriverv0.Driver]
+}
+
+func New() *Bridge {
+	return &Bridge{volumes: volumedriverv0.Point.Require()}
+}
+
+func (b *Bridge) Declaration() extensions.Declaration {
+	return extensions.Declaration{
+		ID:        ExtensionID,
+		Providers: []extensions.Provider{createspecv0.Point.Provide(b)},
+		Deps:      []extensions.AnyDep{b.volumes},
+		Init:      b.init,
+		Shutdown:  b.Stop,
+	}
+}
+
+func (b *Bridge) init(ctx context.Context, cfg extensions.Config) error {
+	driver, err := b.volumes.Get()
+	...
+}
+```
+
+There are three kinds, and the choice matters:
+
+| | ordering | absent providers |
+|---|---|---|
+| `Point.Require()` | providers initialize first | fails to load |
+| `Point.Optional()` | providers initialize first | loads anyway |
+| `Point.Lazy()` | none | resolved at use time |
+
+`Require` and `Optional` are ordering edges, which is what lets `Init` call the
+dependency -- and also what makes a cycle fatal. Reach for `Lazy` when the call
+happens while serving a request rather than during `Init`: it constrains nothing
+about startup, so two subsystems that refer to each other can still be split
+apart.
+
+Conflicts are declared in the `Declaration` alongside them.
+
+For out-of-process extensions the handle is bound to a callback channel to the
+daemon instead of to the broker, so the same code works either way. The binary
+must declare the client wiring for the points it will call:
 
 ```go
 srv := sdk.NewServer()
