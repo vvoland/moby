@@ -6,7 +6,7 @@
 // 	protoc        v3.21.12
 // source: extpoints/createspec/v0/create_spec_hook.proto
 
-package protogen
+package golden
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"

@@ -24,7 +24,7 @@ func TestRegisterBuildsDeclaration(t *testing.T) {
 	registered := false
 	point := serverpoint.Registration{
 		Point:    "org.example.point.v1",
-		Register: func(grpc.ServiceRegistrar, any) { registered = true },
+		Register: func(grpc.ServiceRegistrar, any) error { registered = true; return nil },
 	}
 	ext := extensions.New(extensions.Declaration{
 		ID:           "org.example.extension.v1",
@@ -54,7 +54,7 @@ func TestRegisterRecordsServedServices(t *testing.T) {
 	desc := &grpc.ServiceDesc{ServiceName: "org.example.point.v1.Thing", HandlerType: (*any)(nil)}
 	served := serverpoint.Registration{
 		Point:    "org.example.point.v1",
-		Register: func(r grpc.ServiceRegistrar, impl any) { r.RegisterService(desc, impl) },
+		Register: func(r grpc.ServiceRegistrar, impl any) error { r.RegisterService(desc, impl); return nil },
 	}
 	srv := NewServer()
 	assert.NilError(t, srv.Register(extensions.New(extensions.Declaration{
@@ -68,7 +68,7 @@ func TestRegisterRecordsServedServices(t *testing.T) {
 
 	noService := serverpoint.Registration{
 		Point:    "org.example.point.v1",
-		Register: func(grpc.ServiceRegistrar, any) {},
+		Register: func(grpc.ServiceRegistrar, any) error { return nil },
 	}
 	plainSrv := NewServer()
 	assert.NilError(t, plainSrv.Register(extensions.New(extensions.Declaration{

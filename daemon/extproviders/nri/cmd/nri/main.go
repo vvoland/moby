@@ -18,7 +18,7 @@ import (
 	"syscall"
 
 	"github.com/moby/moby/v2/daemon/extproviders/nri"
-	createspecpb "github.com/moby/moby/v2/extpoints/createspec/v0/protogen"
+	createspecv0 "github.com/moby/moby/v2/extpoints/createspec/v0"
 	"github.com/moby/moby/v2/internal/extensions/sdk"
 )
 
@@ -27,7 +27,7 @@ func main() {
 	defer stop()
 
 	srv := sdk.NewServer()
-	if err := srv.Register(nri.Extension, createspecpb.ServerPoint); err != nil {
+	if err := srv.Register(nri.Extension, createspecv0.ServerPoint); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

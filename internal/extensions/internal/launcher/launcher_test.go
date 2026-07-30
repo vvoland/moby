@@ -11,7 +11,6 @@ import (
 
 	"github.com/moby/moby/v2/internal/extensions"
 	echov1 "github.com/moby/moby/v2/internal/extensions/internal/launcher/echo/v1"
-	echopb "github.com/moby/moby/v2/internal/extensions/internal/launcher/echo/v1/protogen"
 	"gotest.tools/v3/assert"
 	is "gotest.tools/v3/assert/cmp"
 )
@@ -125,7 +124,7 @@ func TestLaunchOutOfProcess(t *testing.T) {
 	assert.Check(t, is.Len(launched.Points, 1))
 	assert.Equal(t, launched.Points[0].ID, echov1.Point.ID())
 
-	client := echopb.ClientProvider(launched.Conn).Impl.(echov1.EchoServer)
+	client := echov1.ClientPoint.Provider(launched.Conn).Impl.(echov1.EchoServer)
 
 	resp, err := client.Echo(ctx, &echov1.EchoRequest{Message: "ping"})
 	assert.NilError(t, err, "non-empty message should be echoed")

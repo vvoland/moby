@@ -113,7 +113,7 @@ func TestHookOnlyServicesAreNotSocketExposed(t *testing.T) {
 	h, err := host.New(ctx, host.Options{
 		RuntimeDir:      t.TempDir(),
 		Dirs:            []string{dir},
-		ClientProviders: []clientpoint.Registration{echopb.ClientPoint},
+		ClientProviders: []clientpoint.Registration{echov1.ClientPoint},
 	})
 	assert.NilError(t, err)
 	defer func() { assert.NilError(t, h.Shutdown(context.Background())) }()

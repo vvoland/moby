@@ -9,8 +9,8 @@ import (
 	"time"
 
 	createspecv0 "github.com/moby/moby/v2/extpoints/createspec/v0"
-	protogen "github.com/moby/moby/v2/extpoints/createspec/v0/protogen"
 	"github.com/moby/moby/v2/internal/extensions/wire"
+	protogen "github.com/moby/moby/v2/internal/extensions/wire/internal/golden"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"gotest.tools/v3/assert"

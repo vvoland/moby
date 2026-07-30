@@ -10,7 +10,7 @@ import (
 	"syscall"
 
 	"github.com/moby/moby/v2/integration/extension/testdata/greeterdep"
-	greeterpb "github.com/moby/moby/v2/internal/extensions/example/greeter/v0/protogen"
+	greeterv0 "github.com/moby/moby/v2/internal/extensions/example/greeter/v0"
 	"github.com/moby/moby/v2/internal/extensions/sdk"
 )
 
@@ -25,7 +25,7 @@ func main() {
 	}
 	// The greeter point is a dependency: register its client wiring so the
 	// resolver Init receives can call it over the callback channel.
-	srv.Depends(greeterpb.ClientPoint)
+	srv.Depends(greeterv0.ClientPoint)
 	if err := srv.Listen(ctx); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

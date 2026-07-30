@@ -8,7 +8,7 @@ import (
 	"github.com/containerd/log"
 	"github.com/moby/moby/v2/daemon/config"
 	"github.com/moby/moby/v2/daemon/internal/rootless"
-	createspecpb "github.com/moby/moby/v2/extpoints/createspec/v0/protogen"
+	createspecv0 "github.com/moby/moby/v2/extpoints/createspec/v0"
 	servicegrpcv0 "github.com/moby/moby/v2/extpoints/servicegrpc/v0"
 	"github.com/moby/moby/v2/internal/extensions"
 	"github.com/moby/moby/v2/internal/extensions/clientpoint"
@@ -101,7 +101,7 @@ func defaultExtensionDir() (string, error) {
 // extension serving the point.
 func clientProviders() []clientpoint.Registration {
 	return []clientpoint.Registration{
-		createspecpb.ClientPoint,
+		createspecv0.ClientPoint,
 	}
 }
 

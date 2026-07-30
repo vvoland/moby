@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/moby/moby/v2/internal/extensions"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
@@ -512,3 +513,25 @@ func SnakeToGoCamel(s string) string {
 }
 
 func snake(s string) string { return CamelToSnake(s) }
+
+// PointDef is the part of an extension point that a wire contract is derived
+// from: its id, which is also the proto package, and its provider interface,
+// which supplies the methods and message types. [extensions.Point] satisfies it.
+type PointDef interface {
+	ID() extensions.PointID
+	Interface() reflect.Type
+}
+
+// MustContract derives the contract for a point, panicking if the point's Go
+// types cannot be represented on the wire.
+//
+// It is meant for a package-scope variable in the point's own package, so a
+// contract this daemon cannot represent fails at build time, in the package that
+// owns the mistake, rather than when some extension first declares the point.
+func MustContract(p PointDef, service string) *Contract {
+	c, err := NewContractFor(string(p.ID()), service, p.Interface())
+	if err != nil {
+		panic(fmt.Sprintf("extensions/wire: point %q: %v", p.ID(), err))
+	}
+	return c
+}

@@ -14,7 +14,6 @@ import (
 
 	"github.com/moby/moby/v2/internal/extensions"
 	echov1 "github.com/moby/moby/v2/internal/extensions/internal/launcher/echo/v1"
-	echopb "github.com/moby/moby/v2/internal/extensions/internal/launcher/echo/v1/protogen"
 	"github.com/moby/moby/v2/internal/extensions/sdk"
 )
 
@@ -39,7 +38,7 @@ func main() {
 		Providers: []extensions.Provider{echov1.Point.Provide(echo{})},
 	})
 	srv := sdk.NewServer()
-	if err := srv.Register(ext, echopb.ServerPoint); err != nil {
+	if err := srv.Register(ext, echov1.ServerPoint); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

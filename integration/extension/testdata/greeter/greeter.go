@@ -16,7 +16,6 @@ import (
 	servicegrpcv0 "github.com/moby/moby/v2/extpoints/servicegrpc/v0"
 	"github.com/moby/moby/v2/internal/extensions"
 	greeterv0 "github.com/moby/moby/v2/internal/extensions/example/greeter/v0"
-	greeterpb "github.com/moby/moby/v2/internal/extensions/example/greeter/v0/protogen"
 	"google.golang.org/grpc"
 )
 
@@ -34,7 +33,7 @@ func (greeter) Greet(_ context.Context, req *greeterv0.HelloRequest) (*greeterv0
 type expose struct{}
 
 func (expose) RegisterServices(r grpc.ServiceRegistrar) {
-	greeterpb.ServerPoint.Register(r, greeter{})
+	greeterv0.ServerPoint.Register(r, greeter{})
 }
 
 // Extension implements only the service.grpc point, so the daemon treats the

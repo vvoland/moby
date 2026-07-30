@@ -13,7 +13,12 @@ import (
 
 // Register registers the gRPC service that serves a point on r, wrapping the
 // provider implementation impl (the point's Go interface, passed as any).
-type Register func(r grpc.ServiceRegistrar, impl any)
+//
+// It returns an error rather than panicking when impl does not implement the
+// point: an extension that declares a point it does not provide is a
+// misconfiguration to report, and loading is all-or-nothing, so it has to fail
+// the extension's startup rather than take the process down.
+type Register func(r grpc.ServiceRegistrar, impl any) error
 
 // Registration pairs a point id with its server registration.
 type Registration struct {

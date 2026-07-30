@@ -85,7 +85,9 @@ func (s *Server) Register(ext extensions.Extension, points ...serverpoint.Regist
 			return fmt.Errorf("extension %q: no server registration for point %q", decl.ID, provider.Point)
 		}
 		rec := &recordingRegistrar{target: s.grpc}
-		register(rec, provider.Impl)
+		if err := register(rec, provider.Impl); err != nil {
+			return fmt.Errorf("extension %q: serve point %q: %w", decl.ID, provider.Point, err)
+		}
 		s.declaration.Providers = append(s.declaration.Providers, &sdkpb.PointDeclaration{Id: string(provider.Point)})
 		s.declaration.ProviderServices = append(s.declaration.ProviderServices, &sdkpb.ProviderServices{
 			Point:    string(provider.Point),

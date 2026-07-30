@@ -110,8 +110,9 @@ func TestServeCallback(t *testing.T) {
 	newDep := func(served *[]any) serverpoint.Registration {
 		return serverpoint.Registration{
 			Point: dep,
-			Register: func(_ grpc.ServiceRegistrar, impl any) {
+			Register: func(_ grpc.ServiceRegistrar, impl any) error {
 				*served = append(*served, impl)
+				return nil
 			},
 		}
 	}
