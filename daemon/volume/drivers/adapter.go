@@ -171,6 +171,21 @@ func (a *volumeAdapter) Unmount(id string) error {
 }
 
 func (a *volumeAdapter) CreatedAt() (time.Time, error) {
+	if !a.createdAt.IsZero() {
+		return a.createdAt, nil
+	}
+	// A volume that came back from Create carries no detail, because the driver
+	// protocol's Create answers with nothing but an error. Ask the driver once,
+	// so the API reports the driver's creation time rather than the zero time.
+	//
+	// A driver that cannot answer leaves the zero value, which is what this
+	// returned before asking was possible; the creation time is not worth
+	// failing an inspect over.
+	v, err := a.proxy.Get(a.name)
+	if err != nil || v == nil {
+		return a.createdAt, nil
+	}
+	a.createdAt = v.CreatedAt
 	return a.createdAt, nil
 }
 

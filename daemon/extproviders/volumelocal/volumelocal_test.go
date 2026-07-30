@@ -156,3 +156,37 @@ func TestLiveRestoreSurvivesTheAdapter(t *testing.T) {
 	assert.Assert(t, ok, "volume %T does not implement volume.LiveRestorer, so live restore would be skipped", created)
 	assert.NilError(t, lr.LiveRestoreVolume(ctx, "container-id"))
 }
+
+// TestCreatedAtSurvivesTheAdapter is a regression test for `docker volume
+// create` reporting the zero time for local volumes.
+//
+// The driver protocol's Create answers with nothing, so the volume the driver
+// store hands back after a create carries no detail. That did not matter while
+// the local driver was registered directly -- the value was a *localVolume,
+// which reads the creation time off the directory. Through the point it is an
+// adapter, and the API rendered CreatedAt as "0001-01-01T00:00:00Z".
+func TestCreatedAtSurvivesTheAdapter(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+
+	h, err := host.New(ctx, host.Options{
+		RuntimeDir: filepath.Join(root, "run"),
+		Extensions: []extensions.Extension{
+			volumelocal.Extension(filepath.Join(root, "volumes"), idtools.Identity{UID: os.Getuid(), GID: os.Getgid()}),
+		},
+	})
+	assert.NilError(t, err)
+	t.Cleanup(func() { assert.NilError(t, h.Shutdown(context.Background())) })
+
+	store := drivers.NewStore(nil)
+	assert.NilError(t, store.RegisterExtensions(ctx, h))
+	d, err := store.GetDriver(volumelocal.DriverName)
+	assert.NilError(t, err)
+
+	created, err := d.Create("createdatvol", nil)
+	assert.NilError(t, err)
+
+	at, err := created.CreatedAt()
+	assert.NilError(t, err)
+	assert.Assert(t, !at.IsZero(), "CreatedAt is the zero time, so the API would report 0001-01-01T00:00:00Z")
+}
