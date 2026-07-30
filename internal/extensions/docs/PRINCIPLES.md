@@ -33,6 +33,15 @@
   A host chooses what to run by passing extension values to the runtime.
   Importing an extension package does nothing by itself.
   This keeps the active set clear, testable, and free of import-order side effects.
-- **Extensions replace legacy plugins.**
-  Network, volume, and log drivers become extension points.
-  The old plugin system goes away.
+- **Extensions replace legacy plugins, as far as the model reaches.**
+  A capability whose contract is request/response becomes a point: volume
+  drivers, network drivers, IPAM, authorization.
+  A point is unary by construction -- one request, one answer -- so a capability
+  with a data plane does not fit, and log drivers are the example.
+  A log driver hands back a `Logger` per container, streams reads through a
+  channel, and takes a call per message; the existing plugin system already does
+  not carry that over RPC, it negotiates a FIFO and writes to it.
+  The shape that fits is a point for the control plane -- open, close, configure
+  -- with the data plane carried out of band, and that is future work rather
+  than something this model quietly covers.
+  The old plugin system goes away for what a point can express.
