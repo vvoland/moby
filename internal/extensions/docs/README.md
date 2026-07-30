@@ -15,6 +15,7 @@ The `.proto` file is generated from that contract so separate-binary extensions 
 - [GLOSSARY.md](./GLOSSARY.md) — names for the main concepts: point, extension, provider, consumer, dependency, broker, adapter, and engine.
 - [PRINCIPLES.md](./PRINCIPLES.md) — the rules this model follows.
 - [DESIGN.md](./DESIGN.md) — the detailed rules for resolution, identifiers, and discovery security.
+- [PROTOCOL.md](./PROTOCOL.md) — the out-of-process protocol, for writing an extension in a language other than Go.
 - [AUTHORING.md](./AUTHORING.md) — how to add a point or write an extension.
 - [EXAMPLES.md](./EXAMPLES.md) — examples, standard points, and the planned info point.
 - [PRIOR_ART.md](./PRIOR_ART.md) — why this is not containerd/plugin, go-plugin, or another existing plugin model.
