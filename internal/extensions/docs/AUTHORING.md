@@ -161,14 +161,14 @@ registrations a host and an SDK need:
 // Contract is the point's wire form, derived from the Go interface.
 var Contract = wire.MustContract(Point, "<Service>")
 
-var ServerPoint = serverpoint.Registration{
-	Point:    Point.ID(),
-	Register: func(r grpc.ServiceRegistrar, impl any) error { return wire.Serve(r, Contract, impl) },
+var ServerPoint = wire.ServerPoint{
+	Point: Point.ID(),
+	Serve: func(r grpc.ServiceRegistrar, impl any) error { return wire.Serve(r, Contract, impl) },
 }
 
-var ClientPoint = clientpoint.Registration{
+var ClientPoint = wire.ClientPoint{
 	Point:    Point.ID(),
-	Provider: func(conn grpc.ClientConnInterface) extensions.Provider { return Point.Provide(client{conn}) },
+	Build: func(conn grpc.ClientConnInterface) extensions.Provider { return Point.Provide(client{conn}) },
 }
 ```
 
@@ -227,7 +227,7 @@ To allow out-of-process providers, add the generated `ClientPoint` to `clientPro
 
 ```go
 func clientProviders() []clientpoint.Registration {
-	return []clientpoint.Registration{
+	return []wire.ClientPoint{
 		createspecv0.ClientPoint,
 		<name>pb.ClientPoint, // add this
 	}
