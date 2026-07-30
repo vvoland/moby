@@ -292,7 +292,7 @@ func extensionFromLaunched(launched *launcher.Launched, providers map[extensions
 		// initialized (and reachable over the callback) before it initializes. Its
 		// config already arrived over the handshake, so the config the broker would
 		// pass is ignored.
-		Init: func(ctx context.Context, _ extensions.Config, _ extensions.Resolver) error {
+		Init: func(ctx context.Context, _ extensions.Config) error {
 			return launched.Initialize(ctx)
 		},
 	}

@@ -233,12 +233,22 @@ type Extension interface {
 // set, configures the extension from the config the host delivers; Shutdown
 // tears it down.
 type Declaration struct {
-	ID           ExtensionID
-	Providers    []Provider
+	ID        ExtensionID
+	Providers []Provider
+	// Deps are the extension's typed dependency handles. Listing a handle here
+	// is what binds it: a handle the declaration omits stays unusable, so a
+	// module cannot reach a point it did not declare.
+	Deps []AnyDep
+	// Dependencies are dependencies declared as data rather than as handles. A
+	// launched extension arrives this way, because its declaration crossed a
+	// process boundary as strings; in-process modules use Deps.
 	Dependencies []Dependency
 	Conflicts    []ExtensionID
-	Init         func(context.Context, Config, Resolver) error
-	Shutdown     func(context.Context) error
+	// Init configures the extension. It receives no resolver: everything the
+	// extension may reach is a handle it declared in Deps, which the broker has
+	// already bound by the time this runs.
+	Init     func(context.Context, Config) error
+	Shutdown func(context.Context) error
 }
 
 // New wraps a static Declaration as an [Extension].

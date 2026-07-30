@@ -106,7 +106,7 @@ func TestListenDeliversConfig(t *testing.T) {
 	var got extensions.Config
 	ext := extensions.New(extensions.Declaration{
 		ID: "org.example.extension.v1",
-		Init: func(_ context.Context, cfg extensions.Config, _ extensions.Resolver) error {
+		Init: func(_ context.Context, cfg extensions.Config) error {
 			got = cfg
 			return nil
 		},

@@ -73,6 +73,14 @@ func (b *Broker) Register(ext extensions.Extension) error {
 			return fmt.Errorf("extension %q dependency must name either point or extension", decl.ID)
 		}
 	}
+	for _, dep := range decl.Deps {
+		if dep == nil {
+			return fmt.Errorf("extension %q has a nil dependency handle", decl.ID)
+		}
+		if dep.Point() == "" {
+			return fmt.Errorf("extension %q has a dependency handle with no point", decl.ID)
+		}
+	}
 	for _, conflict := range decl.Conflicts {
 		if conflict == "" {
 			return fmt.Errorf("extension %q has empty conflict id", decl.ID)
@@ -124,6 +132,14 @@ func (b *Broker) Init(ctx context.Context, configs map[extensions.ExtensionID]ex
 	// unwound: Shutdown walks initOrder in reverse and skips extensions whose
 	// Init never ran (see below).
 	b.initOrder = resolved
+	// Bind every declared handle before anything initializes. A lazy handle is
+	// bound too -- it is read later, not ordered earlier -- so binding is about
+	// what a module may reach, and the graph is about when it may reach it.
+	for _, id := range resolved {
+		for _, dep := range b.extensions[id].extension.Deps {
+			dep.Bind(b)
+		}
+	}
 	b.mu.Unlock()
 
 	for _, id := range resolved {
@@ -138,7 +154,7 @@ func (b *Broker) Init(ctx context.Context, configs map[extensions.ExtensionID]ex
 		// must not be held here: it may resolve providers (RLock) and would
 		// deadlock. Mark it initialized afterwards, under the lock.
 		if initFn != nil {
-			if err := initFn(ctx, configs[id], b); err != nil {
+			if err := initFn(ctx, configs[id]); err != nil {
 				return fmt.Errorf("initialize extension %q: %w", id, err)
 			}
 		}
@@ -206,11 +222,29 @@ func (b *Broker) providersLocked(point extensions.PointID) []extensions.Resolved
 	return b.byPoint[point]
 }
 
+// declaredDependencies is an extension's dependencies as ordering edges: those
+// declared as data, plus its typed handles.
+//
+// A lazy handle is deliberately absent. It says the point is called while
+// serving a request, not during Init, so it needs no provider to exist first --
+// and so it adds no edge that could close a cycle. That is what lets subsystems
+// that genuinely refer to each other be split apart.
+func declaredDependencies(decl extensions.Declaration) []extensions.Dependency {
+	deps := decl.Dependencies
+	for _, d := range decl.Deps {
+		if d.Lazy() {
+			continue
+		}
+		deps = append(deps, extensions.Dependency{Point: d.Point(), Optional: d.Optional()})
+	}
+	return deps
+}
+
 func (b *Broker) resolveOrder() ([]extensions.ExtensionID, error) {
 	dependencies := make(map[extensions.ExtensionID][]extensions.ExtensionID, len(b.extensions))
 	for _, id := range b.order {
 		state := b.extensions[id]
-		for _, dep := range state.extension.Dependencies {
+		for _, dep := range declaredDependencies(state.extension) {
 			if dep.Extension != "" {
 				if _, ok := b.extensions[dep.Extension]; !ok {
 					if dep.Optional {

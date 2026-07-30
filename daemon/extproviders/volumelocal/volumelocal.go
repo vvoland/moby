@@ -53,7 +53,7 @@ type driver struct {
 	root         *local.Root
 }
 
-func (d *driver) init(context.Context, extensions.Config, extensions.Resolver) error {
+func (d *driver) init(context.Context, extensions.Config) error {
 	root, err := local.New(d.scope, d.rootIdentity)
 	if err != nil {
 		return fmt.Errorf("create local volume root: %w", err)

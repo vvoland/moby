@@ -44,7 +44,7 @@ func (b *Bridge) Declaration() extensions.Declaration {
 	}
 }
 
-func (b *Bridge) init(ctx context.Context, cfg extensions.Config, _ extensions.Resolver) error {
+func (b *Bridge) init(ctx context.Context, cfg extensions.Config) error {
 	if len(cfg) > 0 {
 		// Decode the config object into NRIOpts via its JSON tags.
 		raw, err := json.Marshal(cfg)

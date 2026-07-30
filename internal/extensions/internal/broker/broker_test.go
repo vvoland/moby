@@ -27,7 +27,7 @@ func TestInitOrdersDependencies(t *testing.T) {
 			{Point: "dependency.point"},
 			{Extension: "org.test.named-dependency.v1"},
 		},
-		Init: func(context.Context, extensions.Config, extensions.Resolver) error {
+		Init: func(context.Context, extensions.Config) error {
 			order = append(order, "org.test.dependent.v1")
 			return nil
 		},
@@ -36,7 +36,7 @@ func TestInitOrdersDependencies(t *testing.T) {
 	err = b.Register(extensions.New(extensions.Declaration{
 		ID:        "org.test.point-dependency.v1",
 		Providers: []extensions.Provider{{Point: "dependency.point", Impl: pingProvider{}}},
-		Init: func(context.Context, extensions.Config, extensions.Resolver) error {
+		Init: func(context.Context, extensions.Config) error {
 			order = append(order, "org.test.point-dependency.v1")
 			return nil
 		},
@@ -44,7 +44,7 @@ func TestInitOrdersDependencies(t *testing.T) {
 	assert.NilError(t, err)
 	err = b.Register(extensions.New(extensions.Declaration{
 		ID: "org.test.named-dependency.v1",
-		Init: func(context.Context, extensions.Config, extensions.Resolver) error {
+		Init: func(context.Context, extensions.Config) error {
 			order = append(order, "org.test.named-dependency.v1")
 			return nil
 		},
@@ -125,19 +125,19 @@ func TestShutdownUnwindsPartialInit(t *testing.T) {
 	// boom, then last. boom's Init fails; last is never reached.
 	assert.NilError(t, b.Register(extensions.New(extensions.Declaration{
 		ID:       "org.test.first.v1",
-		Init:     func(context.Context, extensions.Config, extensions.Resolver) error { return nil },
+		Init:     func(context.Context, extensions.Config) error { return nil },
 		Shutdown: shutdownRecorder("org.test.first.v1"),
 	})))
 	assert.NilError(t, b.Register(extensions.New(extensions.Declaration{
 		ID: "org.test.boom.v1",
-		Init: func(context.Context, extensions.Config, extensions.Resolver) error {
+		Init: func(context.Context, extensions.Config) error {
 			return errors.New("init failed")
 		},
 		Shutdown: shutdownRecorder("org.test.boom.v1"),
 	})))
 	assert.NilError(t, b.Register(extensions.New(extensions.Declaration{
 		ID:       "org.test.last.v1",
-		Init:     func(context.Context, extensions.Config, extensions.Resolver) error { return nil },
+		Init:     func(context.Context, extensions.Config) error { return nil },
 		Shutdown: shutdownRecorder("org.test.last.v1"),
 	})))
 
@@ -318,7 +318,7 @@ func TestInitAllowsMissingOptionalDependency(t *testing.T) {
 	err := b.Register(extensions.New(extensions.Declaration{
 		ID:           "org.test.dependent.v1",
 		Dependencies: []extensions.Dependency{{Point: "missing.point", Optional: true}},
-		Init: func(context.Context, extensions.Config, extensions.Resolver) error {
+		Init: func(context.Context, extensions.Config) error {
 			initialized = true
 			return nil
 		},
@@ -347,7 +347,7 @@ func TestInitWrapsExtensionError(t *testing.T) {
 	initErr := errors.New("org.test.boom.v1")
 	err := b.Register(extensions.New(extensions.Declaration{
 		ID: "org.test.broken.v1",
-		Init: func(context.Context, extensions.Config, extensions.Resolver) error {
+		Init: func(context.Context, extensions.Config) error {
 			return initErr
 		},
 	}))

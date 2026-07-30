@@ -31,7 +31,7 @@ import (
 type Server struct {
 	declaration *sdkpb.Declaration
 	grpc        *grpc.Server
-	init        func(context.Context, extensions.Config, extensions.Resolver) error
+	init        func(context.Context, extensions.Config) error
 	shutdown    func(context.Context) error
 	registered  bool
 	initialized bool
@@ -39,6 +39,9 @@ type Server struct {
 	// depends maps each dependency point to the client adapter that reaches its
 	// provider over the callback connection.
 	depends map[extensions.PointID]clientpoint.Provider
+	// deps are the extension's declared dependency handles, bound to the
+	// callback channel just before Init.
+	deps []extensions.AnyDep
 
 	// Set from the handshake and held for the deferred Initialize.
 	config           extensions.Config
@@ -101,10 +104,21 @@ func (s *Server) Register(ext extensions.Extension, points ...serverpoint.Regist
 			Optional:  dep.Optional,
 		})
 	}
+	// Handles are dependencies too, and the daemon orders initialization from
+	// what the declaration reports, so they have to cross the boundary with the
+	// data-declared ones. A lazy handle is reported as such: it is bound like any
+	// other, but the daemon must not order anything on it.
+	for _, dep := range decl.Deps {
+		s.declaration.Dependencies = append(s.declaration.Dependencies, &sdkpb.Dependency{
+			Point:    string(dep.Point()),
+			Optional: dep.Optional() || dep.Lazy(),
+		})
+	}
 	for _, id := range decl.Conflicts {
 		s.declaration.Conflicts = append(s.declaration.Conflicts, string(id))
 	}
 	s.init = decl.Init
+	s.deps = decl.Deps
 	s.shutdown = decl.Shutdown
 	s.registered = true
 	return nil
@@ -201,7 +215,13 @@ func (s *Server) initialize() error {
 	if err != nil {
 		return err
 	}
-	if err := s.init(s.initCtx, s.config, resolver); err != nil {
+	// Bind the extension's declared handles to the callback channel, so a
+	// launched extension reads its dependencies exactly as an in-process module
+	// does -- through handles it declared, not through an ambient resolver.
+	for _, dep := range s.deps {
+		dep.Bind(resolver)
+	}
+	if err := s.init(s.initCtx, s.config); err != nil {
 		return fmt.Errorf("initialize extension: %w", err)
 	}
 	s.initialized = true
