@@ -21,8 +21,8 @@ It is all hand-written Go; nothing about a point is generated.
 
 ```
 internal/extpoints/createspec/v0/
-  createspec.go              # interface, messages, Point, helpers
-  wire.go                    # Contract, ClientPoint, ServerPoint, client adapter
+  createspec.go              # interface, messages, Point, helpers, //go:generate
+  wire_gen.go                # generated: Wire, and the client adapter
   create_spec_hook.proto     # the published schema, rendered from the contract
   schema_test.go             # keeps the .proto in step with the Go types
 ```
@@ -216,12 +216,12 @@ Calling such a point is safe.
 ### 5. Let separate-binary extensions implement it
 
 Steps 1 through 4 are enough for in-process providers.
-To allow out-of-process providers, add the generated `ClientPoint` to `clientProviders()` in `daemon/extensions.go`.
+To allow out-of-process providers, add the point's `Wire.Client` to `clientProviders()` in `daemon/extensions.go`.
 
 ```go
 func clientProviders() []wire.ClientPoint {
 	return []wire.ClientPoint{
-		createspecv0.ClientPoint,
+		createspecv0.Wire.Client,
 		<name>pb.ClientPoint, // add this
 	}
 }
@@ -252,7 +252,7 @@ The extension opts in by implementing `service.grpc` and registering its gRPC se
 type expose struct{}
 
 func (expose) RegisterServices(r grpc.ServiceRegistrar) {
-	mypb.RegisterMyServiceServer(r, impl) // or mypb.ServerPoint.Register(r, impl)
+	mypb.RegisterMyServiceServer(r, impl) // or myPoint.Wire.Server.Serve(r, impl)
 }
 
 var Extension = extensions.New(extensions.Declaration{
@@ -430,7 +430,7 @@ must declare the client wiring for the points it will call:
 ```go
 srv := sdk.NewServer()
 srv.Register(ext)
-srv.Depends(volumedriverv0.ClientPoint) // one per dependency point it will call
+srv.Depends(volumedriverv0.Wire.Client) // one per dependency point it will call
 srv.Listen(ctx)
 ```
 
@@ -480,7 +480,7 @@ func main() {
 	defer stop()
 
 	srv := sdk.NewServer()
-	if err := srv.Register(myext.Extension, createspecv0.ServerPoint); err != nil {
+	if err := srv.Register(myext.Extension, createspecv0.Wire.Server); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
