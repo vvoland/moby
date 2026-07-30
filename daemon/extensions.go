@@ -7,9 +7,11 @@ import (
 
 	"github.com/containerd/log"
 	"github.com/moby/moby/v2/daemon/config"
+	"github.com/moby/moby/v2/daemon/internal/idtools"
 	"github.com/moby/moby/v2/daemon/internal/rootless"
 	createspecv0 "github.com/moby/moby/v2/extpoints/createspec/v0"
 	servicegrpcv0 "github.com/moby/moby/v2/extpoints/servicegrpc/v0"
+	volumedriverv0 "github.com/moby/moby/v2/extpoints/volumedriver/v0"
 	"github.com/moby/moby/v2/internal/extensions"
 	"github.com/moby/moby/v2/internal/extensions/clientpoint"
 	"github.com/moby/moby/v2/internal/extensions/grpcproxy"
@@ -23,10 +25,10 @@ import (
 // extensions (see [builtinExtensions]), the out-of-process directories it
 // launches, and the points it supports across the boundary. The daemon is just
 // another host -- a built-in extension registers exactly like a launched one.
-func setupExtensionHost(ctx context.Context, cfg *config.Config) (*host.Host, error) {
+func setupExtensionHost(ctx context.Context, cfg *config.Config, rootIdentity idtools.Identity) (*host.Host, error) {
 	return host.New(ctx, host.Options{
 		RuntimeDir:          filepath.Join(cfg.ExecRoot, "extensions"),
-		Extensions:          builtinExtensions(cfg),
+		Extensions:          builtinExtensions(cfg, rootIdentity),
 		Dirs:                extensionDirs(cfg),
 		ClientProviders:     clientProviders(),
 		DependencyProviders: dependencyProviders(),
@@ -102,6 +104,7 @@ func defaultExtensionDir() (string, error) {
 func clientProviders() []clientpoint.Registration {
 	return []clientpoint.Registration{
 		createspecv0.ClientPoint,
+		volumedriverv0.ClientPoint,
 	}
 }
 
@@ -184,6 +187,6 @@ func (daemon *Daemon) ExposeExtensionServices(gs *grpc.Server) (*grpcproxy.Proxy
 // info` status nor live reload, and still rejects the spec adjustments it cannot
 // map (see the package TODOs). Routing NRI through the extension today would
 // regress those, so it moves here only once the bridge reaches that parity.
-func builtinExtensions(*config.Config) []extensions.Extension {
-	return nil
+func builtinExtensions(cfg *config.Config, rootIdentity idtools.Identity) []extensions.Extension {
+	return defaultVolumeExtensions(cfg.Root, rootIdentity)
 }

@@ -1,0 +1,69 @@
+// Generated from the Go contract of org.mobyproject.extension.volume.driver.v0. DO NOT EDIT.
+
+syntax = "proto3";
+
+package org.mobyproject.extension.volume.driver.v0;
+
+service VolumeDriver {
+  rpc Capabilities(CapabilitiesRequest) returns (CapabilitiesResponse);
+  rpc Create(CreateRequest) returns (CreateResponse);
+  rpc Get(NameRequest) returns (GetResponse);
+  rpc List(ListRequest) returns (ListResponse);
+  rpc Mount(MountRequest) returns (PathResponse);
+  rpc Path(NameRequest) returns (PathResponse);
+  rpc Remove(NameRequest) returns (RemoveResponse);
+  rpc Unmount(MountRequest) returns (UnmountResponse);
+}
+
+message CapabilitiesRequest {
+}
+
+message CapabilitiesResponse {
+  string scope = 1;
+  string name = 2;
+}
+
+message CreateRequest {
+  string name = 1;
+  map<string, string> options = 2;
+}
+
+message NameRequest {
+  string name = 1;
+}
+
+message GetResponse {
+  Volume volume = 1;
+}
+
+message Volume {
+  string name = 1;
+  string mountpoint = 2;
+  string created_at = 3;
+  bytes status = 4;
+}
+
+message ListRequest {
+}
+
+message ListResponse {
+  repeated Volume volumes = 1;
+}
+
+message MountRequest {
+  string name = 1;
+  string ref = 2;
+}
+
+message PathResponse {
+  string mountpoint = 1;
+}
+
+message CreateResponse {
+}
+
+message RemoveResponse {
+}
+
+message UnmountResponse {
+}

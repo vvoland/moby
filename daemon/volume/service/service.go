@@ -16,6 +16,7 @@ import (
 	"github.com/moby/moby/v2/daemon/volume/drivers"
 	"github.com/moby/moby/v2/daemon/volume/service/opts"
 	"github.com/moby/moby/v2/errdefs"
+	"github.com/moby/moby/v2/internal/extensions"
 	"github.com/moby/moby/v2/pkg/plugingetter"
 	"github.com/pkg/errors"
 )
@@ -39,11 +40,18 @@ type VolumesService struct {
 	eventLogger  VolumeEventLogger
 }
 
-// NewVolumeService creates a new volume service
-func NewVolumeService(root string, pg plugingetter.PluginGetter, rootIDs idtools.Identity, logger VolumeEventLogger) (*VolumesService, error) {
+// NewVolumeService creates a new volume service.
+//
+// resolver supplies the volume drivers provided as extensions, including the
+// built-in local driver. It may be nil, in which case the service starts with
+// no drivers but the legacy plugin path -- which is what a test that registers
+// its own driver wants.
+func NewVolumeService(ctx context.Context, root string, pg plugingetter.PluginGetter, rootIDs idtools.Identity, logger VolumeEventLogger, resolver extensions.Resolver) (*VolumesService, error) {
 	ds := drivers.NewStore(pg)
-	if err := setupDefaultDriver(ds, root, rootIDs); err != nil {
-		return nil, err
+	if resolver != nil {
+		if err := ds.RegisterExtensions(ctx, resolver); err != nil {
+			return nil, err
+		}
 	}
 
 	vs, err := NewStore(root, ds, WithEventLogger(logger))

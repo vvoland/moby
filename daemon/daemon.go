@@ -918,7 +918,7 @@ func NewDaemon(ctx context.Context, config *config.Config, pluginStore *plugin.S
 		PluginStore: pluginStore,
 		startupDone: make(chan struct{}),
 	}
-	d.extensionHost, err = setupExtensionHost(ctx, config)
+	d.extensionHost, err = setupExtensionHost(ctx, config, idtools.Identity{UID: uid, GID: gid})
 	if err != nil {
 		return nil, err
 	}
@@ -1094,7 +1094,7 @@ func NewDaemon(ctx context.Context, config *config.Config, pluginStore *plugin.S
 	}
 	log.G(ctx).Debugf("Using default logging driver %s", d.defaultLogConfig.Type)
 
-	d.volumes, err = volumesservice.NewVolumeService(cfgStore.Root, d.PluginStore, idtools.Identity{UID: uid, GID: gid}, d)
+	d.volumes, err = volumesservice.NewVolumeService(ctx, cfgStore.Root, d.PluginStore, idtools.Identity{UID: uid, GID: gid}, d, d.extensionHost)
 	if err != nil {
 		return nil, err
 	}

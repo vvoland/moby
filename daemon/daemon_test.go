@@ -1,6 +1,8 @@
 package daemon
 
 import (
+	"context"
+	"github.com/moby/moby/v2/internal/extensions/host"
 	"net/netip"
 	"os"
 	"path"
@@ -116,7 +118,18 @@ func initDaemonWithVolumeStore(tmp string) (*Daemon, error) {
 		repository: tmp,
 		root:       tmp,
 	}
-	daemon.volumes, err = volumesservice.NewVolumeService(tmp, nil, idtools.Identity{UID: 0, GID: 0}, daemon)
+	// The local driver is a module, so the test composes the set it needs the
+	// same way the daemon does rather than getting it implicitly.
+	ctx := context.Background()
+	rootIdentity := idtools.Identity{UID: 0, GID: 0}
+	h, err := host.New(ctx, host.Options{
+		RuntimeDir: tmp,
+		Extensions: defaultVolumeExtensions(tmp, rootIdentity),
+	})
+	if err != nil {
+		return nil, err
+	}
+	daemon.volumes, err = volumesservice.NewVolumeService(ctx, tmp, nil, rootIdentity, daemon, h)
 	if err != nil {
 		return nil, err
 	}
