@@ -47,22 +47,22 @@ type Binding[T any] struct {
 // Bind derives a point's contract and wires both sides of it.
 //
 // newClient is the only argument that carries real information: it adapts a
-// connection to the point's Go interface, and it is the one part of a point that
-// cannot be derived, because Go can build a function at runtime but not a value
-// implementing an interface. Everything else -- the descriptors, the messages,
+// bound [Client] to the point's Go interface, and it is the one part of a point
+// that cannot be derived, because Go can build a function at runtime but not a
+// value implementing an interface. Everything else -- the descriptors, the messages,
 // the gRPC dispatch, the service registration -- follows from the point's types.
 //
 // It panics if the point's Go types cannot be represented on the wire, so a
 // contract this daemon cannot carry fails at build time in the package that owns
 // it, rather than when some extension first declares the point.
-func Bind[T any](p extensions.Point[T], service string, newClient func(grpc.ClientConnInterface) T) Binding[T] {
+func Bind[T any](p extensions.Point[T], service string, newClient func(Client) T) Binding[T] {
 	contract := MustContract(p, service)
 	return Binding[T]{
 		Contract: contract,
 		Client: ClientPoint{
 			Point: p.ID(),
 			Build: func(conn grpc.ClientConnInterface) extensions.Provider {
-				return p.Provide(newClient(conn))
+				return p.Provide(newClient(Client{Contract: contract, Conn: conn}))
 			},
 		},
 		Server: ServerPoint{

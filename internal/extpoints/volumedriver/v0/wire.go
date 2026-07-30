@@ -4,73 +4,56 @@ import (
 	"context"
 
 	"github.com/moby/moby/v2/internal/extensions/wire"
-	"google.golang.org/grpc"
 )
 
 // Wire is the point's contract and both sides of its gRPC wiring, derived from
 // [Driver] and its message types.
-var Wire = wire.Bind(Point, "VolumeDriver", func(conn grpc.ClientConnInterface) Driver {
-	return client{conn}
+var Wire = wire.Bind(Point, "VolumeDriver", func(c wire.Client) Driver {
+	return client{c}
 })
 
-// client calls an out-of-process driver over conn. It is the one part of a point
-// that is not derived, and the compiler checks it against [Driver].
+// client calls an out-of-process driver.
+//
+// Go can build a function at runtime but not a value implementing an interface,
+// so this adapter is the one part of a point that is not derived. The compiler
+// checks it against [Driver]: a method added to the point fails the build here
+// rather than going silently uncalled across the process boundary.
 type client struct {
-	conn grpc.ClientConnInterface
+	wire.Client
 }
 
 func (c client) Create(ctx context.Context, req *CreateRequest) error {
-	return wire.Invoke(ctx, c.conn, Wire.Contract, "Create", req, nil)
+	return wire.Do(ctx, c.Client, "Create", req)
 }
 
 func (c client) Remove(ctx context.Context, req *NameRequest) error {
-	return wire.Invoke(ctx, c.conn, Wire.Contract, "Remove", req, nil)
+	return wire.Do(ctx, c.Client, "Remove", req)
 }
 
 func (c client) Unmount(ctx context.Context, req *MountRequest) error {
-	return wire.Invoke(ctx, c.conn, Wire.Contract, "Unmount", req, nil)
+	return wire.Do(ctx, c.Client, "Unmount", req)
 }
 
 func (c client) LiveRestore(ctx context.Context, req *MountRequest) error {
-	return wire.Invoke(ctx, c.conn, Wire.Contract, "LiveRestore", req, nil)
+	return wire.Do(ctx, c.Client, "LiveRestore", req)
 }
 
 func (c client) Path(ctx context.Context, req *NameRequest) (*PathResponse, error) {
-	var resp PathResponse
-	if err := wire.Invoke(ctx, c.conn, Wire.Contract, "Path", req, &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
+	return wire.Call[PathResponse](ctx, c.Client, "Path", req)
 }
 
 func (c client) Mount(ctx context.Context, req *MountRequest) (*PathResponse, error) {
-	var resp PathResponse
-	if err := wire.Invoke(ctx, c.conn, Wire.Contract, "Mount", req, &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
+	return wire.Call[PathResponse](ctx, c.Client, "Mount", req)
 }
 
 func (c client) List(ctx context.Context, req *ListRequest) (*ListResponse, error) {
-	var resp ListResponse
-	if err := wire.Invoke(ctx, c.conn, Wire.Contract, "List", req, &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
+	return wire.Call[ListResponse](ctx, c.Client, "List", req)
 }
 
 func (c client) Get(ctx context.Context, req *NameRequest) (*GetResponse, error) {
-	var resp GetResponse
-	if err := wire.Invoke(ctx, c.conn, Wire.Contract, "Get", req, &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
+	return wire.Call[GetResponse](ctx, c.Client, "Get", req)
 }
 
 func (c client) Capabilities(ctx context.Context, req *CapabilitiesRequest) (*CapabilitiesResponse, error) {
-	var resp CapabilitiesResponse
-	if err := wire.Invoke(ctx, c.conn, Wire.Contract, "Capabilities", req, &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
+	return wire.Call[CapabilitiesResponse](ctx, c.Client, "Capabilities", req)
 }

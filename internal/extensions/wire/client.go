@@ -34,13 +34,32 @@ func Invoke(ctx context.Context, conn grpc.ClientConnInterface, c *Contract, met
 	return c.FromDynamic(respMsg, resp)
 }
 
-// Client returns a function that invokes method over conn, for a point adapter
-// to call. Binding the contract and connection once keeps the adapter itself
-// down to one line per method.
-func (c *Contract) Client(conn grpc.ClientConnInterface, method string) func(context.Context, any, any) error {
-	return func(ctx context.Context, req, resp any) error {
-		return Invoke(ctx, conn, c, method, req, resp)
+// Client pairs a point's contract with a connection to a provider of it.
+//
+// A point's client adapter embeds one so that each of its methods is a single
+// forwarding call: the contract and the connection are already bound, leaving
+// only the method name and the request.
+type Client struct {
+	Contract *Contract
+	Conn     grpc.ClientConnInterface
+}
+
+// Call invokes a method that answers with a response.
+//
+//	func (c client) Mount(ctx context.Context, req *MountRequest) (*PathResponse, error) {
+//		return wire.Call[PathResponse](ctx, c.Client, "Mount", req)
+//	}
+func Call[R any](ctx context.Context, c Client, method string, req any) (*R, error) {
+	var resp R
+	if err := Invoke(ctx, c.Conn, c.Contract, method, req, &resp); err != nil {
+		return nil, err
 	}
+	return &resp, nil
+}
+
+// Do invokes a method that answers with only an error.
+func Do(ctx context.Context, c Client, method string, req any) error {
+	return Invoke(ctx, c.Conn, c.Contract, method, req, nil)
 }
 
 // BindFuncs fills a struct of function fields -- one per point method, named
@@ -72,8 +91,10 @@ func (c *Contract) BindFuncs(conn grpc.ClientConnInterface, dst any) error {
 			return err
 		}
 		fv := sv.FieldByIndex(field.Index)
-		call := c.Client(conn, m.Name)
 		method := m
+		call := func(ctx context.Context, req, resp any) error {
+			return Invoke(ctx, conn, c, method.Name, req, resp)
+		}
 		fv.Set(reflect.MakeFunc(field.Type, func(args []reflect.Value) []reflect.Value {
 			ctx := args[0].Interface().(context.Context)
 			req := args[1].Interface()
