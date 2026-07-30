@@ -24,6 +24,13 @@ type Broker struct {
 	extensions map[extensions.ExtensionID]*extensionState
 	order      []extensions.ExtensionID
 	initOrder  []extensions.ExtensionID
+	// byPoint indexes providers by the point they implement, in registration
+	// order. Lookup is on the request path -- a fan-out point is resolved on
+	// every container start -- and the daemon is itself decomposed into
+	// extensions, so scanning every extension's provider list per call would
+	// grow with the number of modules in the daemon rather than with the number
+	// of providers for the point being looked up.
+	byPoint map[extensions.PointID][]extensions.ResolvedProvider
 }
 
 type extensionState struct {
@@ -33,7 +40,10 @@ type extensionState struct {
 
 // New creates an empty Broker.
 func New() *Broker {
-	return &Broker{extensions: make(map[extensions.ExtensionID]*extensionState)}
+	return &Broker{
+		extensions: make(map[extensions.ExtensionID]*extensionState),
+		byPoint:    make(map[extensions.PointID][]extensions.ResolvedProvider),
+	}
 }
 
 // Register adds an extension to the broker.
@@ -82,6 +92,12 @@ func (b *Broker) Register(ext extensions.Extension) error {
 
 	b.extensions[decl.ID] = &extensionState{extension: decl}
 	b.order = append(b.order, decl.ID)
+	for _, provider := range decl.Providers {
+		b.byPoint[provider.Point] = append(b.byPoint[provider.Point], extensions.ResolvedProvider{
+			Extension: decl.ID,
+			Impl:      provider.Impl,
+		})
+	}
 	return nil
 }
 
@@ -172,24 +188,22 @@ func (b *Broker) SingleProvider(point extensions.PointID) (any, error) {
 func (b *Broker) Providers(point extensions.PointID) []extensions.ResolvedProvider {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
-	return b.providersLocked(point)
+	// Clone: the index's slice is shared by every caller, and appending to a
+	// returned slice with spare capacity would write into it. Cloning a point
+	// with no providers -- the common case on a fan-out point nothing implements
+	// -- allocates nothing.
+	return slices.Clone(b.providersLocked(point))
 }
 
 // providersLocked is Providers without locking, for callers that already hold
 // the lock (the exported readers, and resolveOrder during Init).
+//
+// The returned slice is the index's own and must not be modified. It is only
+// appended to, by Register, so a slice handed out earlier stays valid; and since
+// the extension set is fixed once the daemon is up, no reader ever observes a
+// partially built one.
 func (b *Broker) providersLocked(point extensions.PointID) []extensions.ResolvedProvider {
-	var providers []extensions.ResolvedProvider
-	for _, id := range b.order {
-		for _, provider := range b.extensions[id].extension.Providers {
-			if provider.Point == point {
-				providers = append(providers, extensions.ResolvedProvider{
-					Extension: id,
-					Impl:      provider.Impl,
-				})
-			}
-		}
-	}
-	return providers
+	return b.byPoint[point]
 }
 
 func (b *Broker) resolveOrder() ([]extensions.ExtensionID, error) {
