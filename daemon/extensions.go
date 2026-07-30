@@ -122,15 +122,16 @@ func clientProviders() []clientpoint.Registration {
 //   - an in-process extension's services are registered directly on gs, so they
 //     are served on the socket alongside the daemon's own;
 //   - an out-of-process extension's services are proxied by name to its
-//     connection.
+//     connection, by the same server, so they get the same message size limits,
+//     tracing, and interceptors as an in-process one.
 //
 // Every exposed name -- in-process, out-of-process, and the daemon's own
 // reserved services -- must be distinct: a collision is rejected rather than
 // silently overriding, so an extension can never shadow another service, and
 // startup fails, consistent with the host's all-or-nothing loading.
-func (daemon *Daemon) ExposeExtensionServices(gs *grpc.Server) (*grpcproxy.Proxy, error) {
+func (daemon *Daemon) ExposeExtensionServices(gs *grpc.Server, routes *grpcproxy.Routes) error {
 	if daemon.extensionHost == nil {
-		return nil, nil
+		return nil
 	}
 	// Names the daemon's own gRPC server already serves.
 	reserved := make(map[string]struct{})
@@ -143,11 +144,11 @@ func (daemon *Daemon) ExposeExtensionServices(gs *grpc.Server) (*grpcproxy.Proxy
 	// the survivors on gs.
 	inproc, err := servicegrpcv0.Collect(daemon.extensionHost)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	for _, svc := range inproc {
 		if _, taken := reserved[svc.Name]; taken {
-			return nil, fmt.Errorf("in-process extension cannot expose gRPC service %q: it is already served", svc.Name)
+			return fmt.Errorf("in-process extension cannot expose gRPC service %q: it is already served", svc.Name)
 		}
 		reserved[svc.Name] = struct{}{}
 	}
@@ -164,14 +165,12 @@ func (daemon *Daemon) ExposeExtensionServices(gs *grpc.Server) (*grpcproxy.Proxy
 			backends = append(backends, grpcproxy.Backend{ID: string(ext), Conn: conn, Services: names})
 		}
 	}
-	routes, err := grpcproxy.BuildRoutes(backends, reserved)
+	built, err := grpcproxy.BuildRoutes(backends, reserved)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	if len(routes) == 0 {
-		return nil, nil
-	}
-	return grpcproxy.New(routes), nil
+	routes.Set(built)
+	return nil
 }
 
 // builtinExtensions returns the in-process extensions the daemon registers

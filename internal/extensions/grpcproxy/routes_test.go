@@ -52,3 +52,25 @@ func TestBuildRoutesEmpty(t *testing.T) {
 	assert.NilError(t, err)
 	assert.Equal(t, len(routes), 0)
 }
+
+// TestServiceName covers the parsing that decides which backend a call routes
+// to. A path that does not split as expected must yield something that simply
+// fails to match a route, never a partial name that could match the wrong one.
+func TestServiceName(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		path string
+		want string
+	}{
+		{"package service and method", "/pkg.Service/Method", "pkg.Service"},
+		{"dotted package path", "/a.b.C/M", "a.b.C"},
+		{"no method segment", "/pkg.Service", "pkg.Service"},
+		{"no leading slash", "pkg.Service/Method", "pkg.Service"},
+		{"empty path", "", ""},
+		{"only leading slash", "/", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Check(t, is.Equal(serviceName(tc.path), tc.want))
+		})
+	}
+}

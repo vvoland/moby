@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"github.com/moby/moby/v2/internal/extensions/grpcproxy"
 	"net"
 	"net/http"
 	"os"
@@ -350,7 +351,8 @@ func (cli *daemonCLI) start(ctx context.Context) (retErr error) {
 		cluster:  c,
 		builder:  b,
 	})
-	gs := newGRPCServer(ctx)
+	extRoutes := &grpcproxy.Routes{}
+	gs := newGRPCServer(ctx, extRoutes)
 	b.backend.RegisterGRPC(gs)
 	// Publish the gRPC services extensions opted to expose on the API socket, so
 	// external clients reach them over docker.sock alongside the REST API and the
@@ -358,12 +360,11 @@ func (cli *daemonCLI) start(ctx context.Context) (retErr error) {
 	// out-of-process ones are proxied. A service name that collides with a daemon
 	// service (or another extension) is rejected, so the proxy's routes stay
 	// disjoint from gs and the dispatch order in newHTTPHandler cannot shadow one.
-	extProxy, err := d.ExposeExtensionServices(gs)
-	if err != nil {
+	if err := d.ExposeExtensionServices(gs, extRoutes); err != nil {
 		return err
 	}
 	httpServer.Protocols = &p
-	httpServer.Handler = newHTTPHandler(ctx, gs, extProxy, apiServer.CreateMux(ctx, routers...))
+	httpServer.Handler = newHTTPHandler(ctx, gs, apiServer.CreateMux(ctx, routers...))
 
 	go d.ProcessClusterNotifications(ctx, c.GetWatchStream())
 

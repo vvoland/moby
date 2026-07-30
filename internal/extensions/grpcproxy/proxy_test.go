@@ -56,11 +56,10 @@ func TestProxyServerStreaming(t *testing.T) {
 	backendSock := filepath.Join(t.TempDir(), "backend.sock")
 	backendConn := serve(t, backendSock, func(s *grpc.Server) { s.RegisterService(&streamerDesc, nil) })
 
-	proxy := grpcproxy.New(map[string]grpc.ClientConnInterface{"test.Streamer": backendConn})
 	proxySock := filepath.Join(t.TempDir(), "proxy.sock")
 	lis, err := net.Listen("unix", proxySock)
 	assert.NilError(t, err)
-	go proxy.Serve(lis)
+	proxy := serveProxy(t, lis, map[string]grpc.ClientConnInterface{"test.Streamer": backendConn})
 	defer proxy.Stop()
 
 	clientConn, err := grpc.NewClient("unix:"+proxySock, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -249,11 +248,10 @@ func startProxy(t *testing.T, service string, register func(*grpc.Server)) *grpc
 	t.Helper()
 	backendConn := serve(t, filepath.Join(t.TempDir(), "backend.sock"), register)
 
-	proxy := grpcproxy.New(map[string]grpc.ClientConnInterface{service: backendConn})
 	proxySock := filepath.Join(t.TempDir(), "proxy.sock")
 	lis, err := net.Listen("unix", proxySock)
 	assert.NilError(t, err)
-	go proxy.Serve(lis)
+	proxy := serveProxy(t, lis, map[string]grpc.ClientConnInterface{service: backendConn})
 	t.Cleanup(proxy.Stop)
 
 	clientConn, err := grpc.NewClient("unix:"+proxySock, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -277,4 +275,18 @@ func serve(t *testing.T, sock string, register func(*grpc.Server)) grpc.ClientCo
 	assert.NilError(t, err)
 	t.Cleanup(func() { conn.Close() })
 	return conn
+}
+
+// serveProxy starts a gRPC server that forwards routes through the
+// unknown-service handler, which is how the daemon installs it.
+func serveProxy(t *testing.T, lis net.Listener, routes map[string]grpc.ClientConnInterface) *grpc.Server {
+	t.Helper()
+	var forward grpcproxy.Routes
+	forward.Set(routes)
+	srv := grpc.NewServer(
+		grpc.ForceServerCodecV2(grpcproxy.NewCodec()),
+		grpc.UnknownServiceHandler(forward.Forward),
+	)
+	go srv.Serve(lis)
+	return srv
 }

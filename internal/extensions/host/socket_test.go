@@ -75,7 +75,14 @@ func TestSocketExposure(t *testing.T) {
 	sock := filepath.Join(t.TempDir(), "api.sock")
 	lis, err := net.Listen("unix", sock)
 	assert.NilError(t, err)
-	proxy := grpcproxy.New(routes)
+	// Built exactly as the daemon builds it: forwarding is the unknown-service
+	// handler on an ordinary gRPC server, not a server of its own.
+	var forward grpcproxy.Routes
+	forward.Set(routes)
+	proxy := grpc.NewServer(
+		grpc.ForceServerCodecV2(grpcproxy.NewCodec()),
+		grpc.UnknownServiceHandler(forward.Forward),
+	)
 	go proxy.Serve(lis)
 	defer proxy.Stop()
 

@@ -4,6 +4,12 @@
 // socket: the daemon never imports the extension's generated code, it just
 // forwards the bytes to the extension serving the service. Unary and streaming
 // methods are forwarded the same way.
+//
+// Forwarding is installed on the daemon's own gRPC server as its unknown-service
+// handler rather than on a second server of its own. That is what makes an
+// exposed service behave the same wherever it runs: a proxied service gets the
+// daemon's message size limits, tracing, and error interceptors, exactly as an
+// in-process extension's service registered on the same server does.
 package grpcproxy
 
 import (
@@ -11,51 +17,60 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
-	"net/http"
 	"slices"
 	"strings"
+	"sync"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/encoding"
+	_ "google.golang.org/grpc/encoding/proto" // register the proto codec Codec delegates to
 	"google.golang.org/grpc/mem"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
-// passthroughCodec forwards messages as raw bytes. It reports the name "proto"
-// so the content-type the proxy sends to the backend matches the proto wire the
-// external client sent -- the bytes pass through untouched, and the backend
-// decodes them with its own proto codec. It is used only via grpc's force-codec
-// options, so it never shadows the registered proto codec.
-type passthroughCodec struct{}
-
-func (passthroughCodec) Name() string { return "proto" }
-
-func (passthroughCodec) Marshal(v any) (mem.BufferSlice, error) {
-	bs, ok := v.(mem.BufferSlice)
-	if !ok {
-		return nil, fmt.Errorf("grpcproxy: cannot marshal %T", v)
-	}
-	bs.Ref() // gRPC frees the returned slice; keep the caller's reference intact.
-	return bs, nil
+// Codec forwards proxied messages as raw bytes and hands everything else to the
+// codec it embeds.
+//
+// The proxy runs on the daemon's own gRPC server, which also serves ordinary
+// typed services, so a codec installed there has to do both jobs: a proxied call
+// is carried as an opaque frame, and every other call is decoded normally. It
+// reports the name "proto" because the bytes really are proto -- the daemon just
+// does not know their schema -- so the content type it forwards is the one the
+// external client sent.
+type Codec struct {
+	encoding.CodecV2
 }
 
-func (passthroughCodec) Unmarshal(data mem.BufferSlice, v any) error {
-	dst, ok := v.(*mem.BufferSlice)
-	if !ok {
-		return fmt.Errorf("grpcproxy: cannot unmarshal into %T", v)
+// NewCodec returns the hybrid codec wrapping gRPC's registered proto codec.
+func NewCodec() Codec { return Codec{CodecV2: encoding.GetCodecV2("proto")} }
+
+func (c Codec) Marshal(v any) (mem.BufferSlice, error) {
+	if bs, ok := v.(mem.BufferSlice); ok {
+		bs.Ref() // gRPC frees the returned slice; keep the caller's reference intact.
+		return bs, nil
 	}
-	data.Ref() // data is freed when Unmarshal returns; take our own reference.
-	*dst = data
-	return nil
+	return c.CodecV2.Marshal(v)
 }
 
-// Proxy forwards calls for a set of gRPC service names to their backend
-// connections.
-type Proxy struct {
+func (c Codec) Unmarshal(data mem.BufferSlice, v any) error {
+	if dst, ok := v.(*mem.BufferSlice); ok {
+		data.Ref() // data is freed when Unmarshal returns; take our own reference.
+		*dst = data
+		return nil
+	}
+	return c.CodecV2.Unmarshal(data, v)
+}
+
+// Routes maps gRPC service names to the backend serving each.
+//
+// It is created empty and filled once, before the server starts serving, because
+// the daemon's gRPC server has to exist before the extensions whose services it
+// will forward have been resolved.
+type Routes struct {
+	mu     sync.RWMutex
 	routes map[string]grpc.ClientConnInterface
-	server *grpc.Server
 }
 
 // Backend is one gRPC backend the proxy can forward to: the service names it
@@ -93,47 +108,33 @@ func BuildRoutes(backends []Backend, reserved map[string]struct{}) (map[string]g
 	return routes, nil
 }
 
-// New builds a proxy that forwards each service in routes to its connection.
-func New(routes map[string]grpc.ClientConnInterface) *Proxy {
-	p := &Proxy{routes: routes}
-	p.server = grpc.NewServer(
-		grpc.ForceServerCodecV2(passthroughCodec{}),
-		grpc.UnknownServiceHandler(p.forward),
-	)
-	return p
+// Set installs the routes. It is called once, after extensions are resolved and
+// before the server serves.
+func (r *Routes) Set(routes map[string]grpc.ClientConnInterface) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.routes = routes
 }
 
-// Handles reports whether the proxy forwards the gRPC service.
-func (p *Proxy) Handles(service string) bool {
-	_, ok := p.routes[service]
-	return ok
+func (r *Routes) lookup(service string) (grpc.ClientConnInterface, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	conn, ok := r.routes[service]
+	return conn, ok
 }
 
-// ServeHTTP serves the gRPC requests it handles over HTTP/2; this is how the
-// daemon dispatches to it from its API server.
-func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	p.server.ServeHTTP(w, r)
-}
-
-// Serve serves the proxy directly on lis (gRPC over the listener), for callers
-// that do not multiplex it behind an HTTP server.
-func (p *Proxy) Serve(lis net.Listener) error { return p.server.Serve(lis) }
-
-// Stop stops serving.
-func (p *Proxy) Stop() { p.server.Stop() }
-
-// forward proxies a call -- unary or streaming -- to the backend serving its
+// Forward proxies a call -- unary or streaming -- to the backend serving its
 // service. A unary call is just a stream carrying one message each way, so this
 // single handler covers every method shape: it opens a bidirectional stream to
 // the backend and pumps raw frames in both directions, forwarding the response
 // header before the first reply and the trailer (with the backend's status)
 // after the last.
-func (p *Proxy) forward(_ any, serverStream grpc.ServerStream) error {
+func (r *Routes) Forward(_ any, serverStream grpc.ServerStream) error {
 	fullMethod, ok := grpc.MethodFromServerStream(serverStream)
 	if !ok {
 		return status.Error(codes.Internal, "grpcproxy: no method in stream")
 	}
-	conn, ok := p.routes[serviceName(fullMethod)]
+	conn, ok := r.lookup(serviceName(fullMethod))
 	if !ok {
 		return status.Errorf(codes.Unimplemented, "grpcproxy: no backend for %s", fullMethod)
 	}
@@ -146,7 +147,7 @@ func (p *Proxy) forward(_ any, serverStream grpc.ServerStream) error {
 
 	clientStream, err := conn.NewStream(ctx,
 		&grpc.StreamDesc{ServerStreams: true, ClientStreams: true},
-		fullMethod, grpc.ForceCodecV2(passthroughCodec{}))
+		fullMethod, grpc.ForceCodecV2(NewCodec()))
 	if err != nil {
 		return err
 	}
