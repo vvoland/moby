@@ -107,6 +107,22 @@ func (d *driver) Unmount(_ context.Context, req *volumedriverv0.MountRequest) er
 	return v.Unmount(req.Ref)
 }
 
+// LiveRestore restores the driver's per-volume state for a container that
+// outlived a daemon restart. The local driver reference-counts mounts, so
+// without this a volume still mounted by a live-restored container would look
+// unused and could be unmounted from under it.
+func (d *driver) LiveRestore(ctx context.Context, req *volumedriverv0.MountRequest) error {
+	v, err := d.root.Get(req.Name)
+	if err != nil {
+		return err
+	}
+	lr, ok := v.(volume.LiveRestorer)
+	if !ok {
+		return nil
+	}
+	return lr.LiveRestoreVolume(ctx, req.Ref)
+}
+
 func (d *driver) Get(_ context.Context, req *volumedriverv0.NameRequest) (*volumedriverv0.GetResponse, error) {
 	v, err := d.root.Get(req.Name)
 	if err != nil {

@@ -43,6 +43,16 @@ type Driver interface {
 	// Capabilities reports how the driver behaves. It is called before a driver
 	// is used, so an unusable driver is rejected before it owns any data.
 	Capabilities(ctx context.Context, req *CapabilitiesRequest) (*CapabilitiesResponse, error)
+	// LiveRestore reattaches a volume to a consumer that outlived a daemon
+	// restart.
+	//
+	// A driver that reference-counts mounts has no way to learn about those
+	// consumers otherwise: the containers were never started by this daemon
+	// process, so no Mount call was made for them, and the driver would consider
+	// the volume unused while it is in fact mounted. It is called once per
+	// live-restored container, after restart. A driver that keeps no such state
+	// returns nil.
+	LiveRestore(ctx context.Context, req *MountRequest) error
 }
 
 // CreateRequest names a volume to provision and its driver-specific options.

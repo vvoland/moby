@@ -2,6 +2,8 @@ package volumelocal_test
 
 import (
 	"context"
+	"github.com/moby/moby/v2/daemon/volume"
+	"github.com/moby/moby/v2/daemon/volume/drivers"
 	"net"
 	"os"
 	"path/filepath"
@@ -114,4 +116,43 @@ func TestLocalDriverIsLocationTransparent(t *testing.T) {
 		assert.Check(t, mountpoint != "")
 		assert.Check(t, is.Equal(listed, 1))
 	})
+}
+
+// TestLiveRestoreSurvivesTheAdapter is a regression test for the local driver
+// losing its live-restore path when it became an extension.
+//
+// The driver used to be registered directly, so the volume the service got back
+// was a *localVolume and satisfied volume.LiveRestorer. Reached through the
+// point it is a driver-store adapter instead, and the service's type assertion
+// quietly took the "does not implement" branch -- so a volume still mounted by a
+// container that outlived the daemon came back with its mount reference count
+// lost, and a later unmount could tear it out from under that container.
+//
+// The assertion has to hold on what the volume service actually receives.
+func TestLiveRestoreSurvivesTheAdapter(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+
+	h, err := host.New(ctx, host.Options{
+		RuntimeDir: filepath.Join(root, "run"),
+		Extensions: []extensions.Extension{
+			volumelocal.Extension(filepath.Join(root, "volumes"), idtools.Identity{UID: os.Getuid(), GID: os.Getgid()}),
+		},
+	})
+	assert.NilError(t, err)
+	t.Cleanup(func() { assert.NilError(t, h.Shutdown(context.Background())) })
+
+	store := drivers.NewStore(nil)
+	assert.NilError(t, store.RegisterExtensions(ctx, h))
+
+	d, err := store.GetDriver(volumelocal.DriverName)
+	assert.NilError(t, err)
+
+	created, err := d.Create("restored", nil)
+	assert.NilError(t, err)
+
+	// This is the assertion daemon/volume/service.LiveRestoreVolume makes.
+	lr, ok := created.(volume.LiveRestorer)
+	assert.Assert(t, ok, "volume %T does not implement volume.LiveRestorer, so live restore would be skipped", created)
+	assert.NilError(t, lr.LiveRestoreVolume(ctx, "container-id"))
 }

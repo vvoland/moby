@@ -179,3 +179,26 @@ func (a *volumeAdapter) Status() map[string]any {
 	maps.Copy(out, a.status)
 	return out
 }
+
+// liveRestorer is implemented by a driver proxy that can restore its per-volume
+// state after a live restore. It is optional: the legacy plugin protocol has no
+// such call, so a plugin-backed volume simply has nothing to restore.
+type liveRestorer interface {
+	LiveRestore(name, ref string) error
+}
+
+// LiveRestoreVolume restores the driver's state for a volume still in use by a
+// container that outlived the daemon.
+//
+// It is defined on the adapter rather than left to the concrete volume type
+// because the adapter is what the volume service sees: a driver reached through
+// it -- built in or not, in process or not -- would otherwise fail the
+// [volume.LiveRestorer] type assertion and silently skip the restore, leaving a
+// reference-counting driver believing a mounted volume is idle.
+func (a *volumeAdapter) LiveRestoreVolume(_ context.Context, ref string) error {
+	lr, ok := a.proxy.(liveRestorer)
+	if !ok {
+		return nil
+	}
+	return lr.LiveRestore(a.name, ref)
+}

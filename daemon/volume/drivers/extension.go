@@ -92,6 +92,10 @@ func (p *extensionProxy) Unmount(name, id string) error {
 	return p.driver.Unmount(p.ctx, &volumedriverv0.MountRequest{Name: name, Ref: id})
 }
 
+func (p *extensionProxy) LiveRestore(name, ref string) error {
+	return p.driver.LiveRestore(p.ctx, &volumedriverv0.MountRequest{Name: name, Ref: ref})
+}
+
 func (p *extensionProxy) List() ([]*proxyVolume, error) {
 	resp, err := p.driver.List(p.ctx, &volumedriverv0.ListRequest{})
 	if err != nil {

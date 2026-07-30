@@ -9,6 +9,7 @@ service VolumeDriver {
   rpc Create(CreateRequest) returns (CreateResponse);
   rpc Get(NameRequest) returns (GetResponse);
   rpc List(ListRequest) returns (ListResponse);
+  rpc LiveRestore(MountRequest) returns (LiveRestoreResponse);
   rpc Mount(MountRequest) returns (PathResponse);
   rpc Path(NameRequest) returns (PathResponse);
   rpc Remove(NameRequest) returns (RemoveResponse);
@@ -60,6 +61,9 @@ message PathResponse {
 }
 
 message CreateResponse {
+}
+
+message LiveRestoreResponse {
 }
 
 message RemoveResponse {

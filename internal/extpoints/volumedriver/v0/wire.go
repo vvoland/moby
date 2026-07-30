@@ -48,6 +48,10 @@ func (c client) Unmount(ctx context.Context, req *MountRequest) error {
 	return wire.Invoke(ctx, c.conn, Contract, "Unmount", req, nil)
 }
 
+func (c client) LiveRestore(ctx context.Context, req *MountRequest) error {
+	return wire.Invoke(ctx, c.conn, Contract, "LiveRestore", req, nil)
+}
+
 func (c client) Path(ctx context.Context, req *NameRequest) (*PathResponse, error) {
 	var resp PathResponse
 	if err := wire.Invoke(ctx, c.conn, Contract, "Path", req, &resp); err != nil {
