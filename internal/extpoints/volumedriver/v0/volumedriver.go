@@ -11,6 +11,8 @@
 //
 // A driver is selected by name (docker volume create -d <name>), so the point's
 // providers are looked up by extension id rather than fanned out.
+//go:generate go run github.com/moby/moby/v2/internal/extensions/cmd/pointgen -dir . -service VolumeDriver
+
 package volumedriverv0
 
 import (

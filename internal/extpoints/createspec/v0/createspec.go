@@ -1,3 +1,5 @@
+//go:generate go run github.com/moby/moby/v2/internal/extensions/cmd/pointgen -dir . -service CreateSpecHook
+
 package createspecv0
 
 import (

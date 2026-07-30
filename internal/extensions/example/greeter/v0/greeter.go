@@ -2,6 +2,8 @@
 // extension can implement and publish on the daemon's API socket via the
 // service.grpc point. It exists to exercise socket exposure end to end -- it is
 // not a real engine point.
+//go:generate go run github.com/moby/moby/v2/internal/extensions/cmd/pointgen -dir . -service Greeter
+
 package greeterv0
 
 import (
