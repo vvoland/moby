@@ -3,6 +3,7 @@ package extensions
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 )
 
 // Dep is a declared dependency on a point and the handle used to read it.
@@ -39,6 +40,19 @@ type Dep[T any] struct {
 
 	mu       sync.RWMutex
 	resolver Resolver
+
+	// resolvedAll caches a fan-out lookup, for the same reason as resolved.
+	resolvedAll atomic.Pointer[[]TypedProvider[T]]
+
+	// resolved caches the provider after the first successful lookup.
+	//
+	// A dependency is read on the path it serves, so a module that holds a
+	// handle rather than a field would otherwise pay two lock acquisitions, a
+	// map lookup, and a type assertion on every call -- and pay them on a lock
+	// every other module is also taking. The extension set is fixed once the
+	// daemon is up, so what a handle resolves to cannot change, and the answer
+	// is worth keeping. After the first call this is an atomic load.
+	resolved atomic.Pointer[T]
 }
 
 // AnyDep is a dependency handle as the broker sees it, without its type
@@ -104,6 +118,10 @@ func (d *Dep[T]) Bind(r Resolver) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.resolver = r
+	// Rebinding invalidates anything resolved through the previous resolver,
+	// which matters for a handle reused across hosts in tests.
+	d.resolved.Store(nil)
+	d.resolvedAll.Store(nil)
 }
 
 // Get returns the single provider of the point.
@@ -112,6 +130,9 @@ func (d *Dep[T]) Bind(r Resolver) {
 // dependency surfaces: at the first use, with the point named, rather than as a
 // silent success that depends on initialization order.
 func (d *Dep[T]) Get() (T, error) {
+	if p := d.resolved.Load(); p != nil {
+		return *p, nil
+	}
 	var zero T
 	r, err := d.bound()
 	if err != nil {
@@ -121,16 +142,31 @@ func (d *Dep[T]) Get() (T, error) {
 	if err != nil {
 		return zero, err
 	}
-	return typedProvider[T](d.point, "", provider)
+	impl, err := typedProvider[T](d.point, "", provider)
+	if err != nil {
+		return zero, err
+	}
+	d.resolved.Store(&impl)
+	return impl, nil
 }
 
 // All returns every provider of the point, for a fan-out dependency.
+//
+// The returned slice is cached and shared, so callers must not modify it.
 func (d *Dep[T]) All() ([]TypedProvider[T], error) {
+	if p := d.resolvedAll.Load(); p != nil {
+		return *p, nil
+	}
 	r, err := d.bound()
 	if err != nil {
 		return nil, err
 	}
-	return Point[T]{id: d.point}.All(r)
+	all, err := Point[T]{id: d.point}.All(r)
+	if err != nil {
+		return nil, err
+	}
+	d.resolvedAll.Store(&all)
+	return all, nil
 }
 
 // ByExtension returns the provider implemented by a named extension.
