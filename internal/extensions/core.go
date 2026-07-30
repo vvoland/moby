@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"regexp"
 	"sync"
 )
@@ -48,6 +49,11 @@ type TypedProvider[T any] struct {
 // Point binds a point ID to the Go interface implemented by its providers.
 type Point[T any] struct {
 	id PointID
+	// iface is the provider interface's reflect type. Carrying it makes the
+	// contract introspectable at runtime, which is what lets the wire form -- the
+	// .proto, the messages, and the gRPC dispatch -- be derived from the Go
+	// contract instead of generated alongside it.
+	iface reflect.Type
 }
 
 // pointIDPattern is the required shape of a point id: a reverse-DNS-style,
@@ -67,8 +73,12 @@ func DefinePoint[T any](id PointID) Point[T] {
 	if !pointIDPattern().MatchString(string(id)) {
 		panic(fmt.Sprintf("extensions: invalid point id %q: want <tld>.<name>...vN, e.g. org.mobyproject.extension.volume.driver.v1", id))
 	}
-	return Point[T]{id: id}
+	return Point[T]{id: id, iface: reflect.TypeFor[T]()}
 }
+
+// Interface returns the provider interface's reflect type, from which a point's
+// wire contract is derived.
+func (p Point[T]) Interface() reflect.Type { return p.iface }
 
 // extensionIDPattern is the required shape of an extension id: a reverse-DNS
 // name of at least two lowercase, dot-separated segments followed by a
