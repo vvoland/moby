@@ -226,7 +226,7 @@ Steps 1 through 4 are enough for in-process providers.
 To allow out-of-process providers, add the generated `ClientPoint` to `clientProviders()` in `daemon/extensions.go`.
 
 ```go
-func clientProviders() []clientpoint.Registration {
+func clientProviders() []wire.ClientPoint {
 	return []wire.ClientPoint{
 		createspecv0.ClientPoint,
 		<name>pb.ClientPoint, // add this
