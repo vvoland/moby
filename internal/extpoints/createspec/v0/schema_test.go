@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	createspecv0 "github.com/moby/moby/v2/extpoints/createspec/v0"
+	createspecv0 "github.com/moby/moby/v2/internal/extpoints/createspec/v0"
 	"gotest.tools/v3/assert"
 	"gotest.tools/v3/golden"
 )

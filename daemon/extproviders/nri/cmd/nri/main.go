@@ -18,8 +18,8 @@ import (
 	"syscall"
 
 	"github.com/moby/moby/v2/daemon/extproviders/nri"
-	createspecv0 "github.com/moby/moby/v2/extpoints/createspec/v0"
 	"github.com/moby/moby/v2/internal/extensions/sdk"
+	createspecv0 "github.com/moby/moby/v2/internal/extpoints/createspec/v0"
 )
 
 func main() {

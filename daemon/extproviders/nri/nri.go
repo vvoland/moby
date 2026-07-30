@@ -20,8 +20,8 @@ import (
 	"github.com/containerd/nri/pkg/api"
 	"github.com/moby/moby/v2/daemon/pkg/opts"
 	"github.com/moby/moby/v2/dockerversion"
-	createspecv0 "github.com/moby/moby/v2/extpoints/createspec/v0"
 	"github.com/moby/moby/v2/internal/extensions"
+	createspecv0 "github.com/moby/moby/v2/internal/extpoints/createspec/v0"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 

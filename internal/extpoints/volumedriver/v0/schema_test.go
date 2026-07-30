@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	volumedriverv0 "github.com/moby/moby/v2/extpoints/volumedriver/v0"
+	volumedriverv0 "github.com/moby/moby/v2/internal/extpoints/volumedriver/v0"
 	"gotest.tools/v3/assert"
 	"gotest.tools/v3/golden"
 )

@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/moby/moby/v2/daemon/volume"
-	volumedriverv0 "github.com/moby/moby/v2/extpoints/volumedriver/v0"
 	"github.com/moby/moby/v2/internal/extensions"
+	volumedriverv0 "github.com/moby/moby/v2/internal/extpoints/volumedriver/v0"
 )
 
 // RegisterExtensions registers every volume driver provided as an extension.

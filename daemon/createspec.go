@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/moby/moby/v2/daemon/container"
-	createspecv0 "github.com/moby/moby/v2/extpoints/createspec/v0"
+	createspecv0 "github.com/moby/moby/v2/internal/extpoints/createspec/v0"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 

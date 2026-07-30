@@ -19,6 +19,8 @@ The current interfaces are shaped so these features can be added later without c
   If the process dies, callers get gRPC errors until the daemon restarts.
   There is no watchdog, reconnect loop, or restart policy yet.
 - **Public importable packages.**
-  The framework lives under `internal/`, so another module cannot import a point or its generated client.
+  Everything lives under `internal/`, points included, so another module cannot import a point or build a Go client for one.
+  That is deliberate while the design is `.v0`: a package can be promoted out of `internal/` later without breaking anyone, and cannot be moved back in.
   Publishing a package such as `github.com/moby/extensions` would allow out-of-tree points and Go clients for exposed points.
+  An extension written in another language is unaffected either way: it works from the point's published `.proto`, not from Go.
   That would also freeze the Go API as a compatibility promise, so the primitives need to settle first.

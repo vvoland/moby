@@ -19,8 +19,8 @@ import (
 	"github.com/moby/moby/v2/daemon/internal/idtools"
 	"github.com/moby/moby/v2/daemon/volume"
 	"github.com/moby/moby/v2/daemon/volume/local"
-	volumedriverv0 "github.com/moby/moby/v2/extpoints/volumedriver/v0"
 	"github.com/moby/moby/v2/internal/extensions"
+	volumedriverv0 "github.com/moby/moby/v2/internal/extpoints/volumedriver/v0"
 )
 
 // ID is the extension id of the built-in local volume driver.

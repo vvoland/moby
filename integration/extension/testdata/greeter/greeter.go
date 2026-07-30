@@ -13,9 +13,9 @@ package greeter
 import (
 	"context"
 
-	servicegrpcv0 "github.com/moby/moby/v2/extpoints/servicegrpc/v0"
 	"github.com/moby/moby/v2/internal/extensions"
 	greeterv0 "github.com/moby/moby/v2/internal/extensions/example/greeter/v0"
+	servicegrpcv0 "github.com/moby/moby/v2/internal/extpoints/servicegrpc/v0"
 	"google.golang.org/grpc"
 )
 

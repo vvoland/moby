@@ -9,7 +9,7 @@ It covers two tasks:
 For the model, read [GLOSSARY.md](./GLOSSARY.md), [PRINCIPLES.md](./PRINCIPLES.md), and [DESIGN.md](./DESIGN.md).
 For examples, read [EXAMPLES.md](./EXAMPLES.md).
 
-Use the real points in `extpoints/` as references.
+Use the real points in `internal/extpoints/` as references.
 `createspec/v0` is a real engine hook.
 `containercreate/v0` is another engine point.
 `internal/extensions/servicegrpc/v0` is the standard socket-exposure point used by the SDK and host.
@@ -17,11 +17,11 @@ Use the real points in `extpoints/` as references.
 
 ## The shape of a point on disk
 
-A point lives in `extpoints/<area>/<name>/v<N>/`.
+A point lives in `internal/extpoints/<area>/<name>/v<N>/`.
 It is all hand-written Go; nothing about a point is generated.
 
 ```
-extpoints/createspec/v0/
+internal/extpoints/createspec/v0/
   createspec.go              # interface, messages, Point, helpers
   wire.go                    # Contract, ClientPoint, ServerPoint, client adapter
   create_spec_hook.proto     # the published schema, rendered from the contract
@@ -48,7 +48,7 @@ two drift.
 
 ### 1. Write the Go contract
 
-Create `extpoints/<area>/<name>/v0/<name>.go`.
+Create `internal/extpoints/<area>/<name>/v0/<name>.go`.
 A new point starts at `v0`.
 A `.v0` point is experimental and may change without backward compatibility until it is promoted to `v1`.
 
@@ -188,7 +188,7 @@ Add a `schema_test.go` that compares `Contract.Proto()` against the `.proto` in
 the package, and generate it once:
 
 ```console
-$ go test ./extpoints/<area>/<name>/v0/ -update
+$ go test ./internal/extpoints/<area>/<name>/v0/ -update
 ```
 
 There is no build step, no `protoc`, and no Docker image. The test fails if the
@@ -480,9 +480,9 @@ Health checks, reconnect, and restart are future work in [ROADMAP.md](./ROADMAP.
 
 | Task | Where | What |
 |---|---|---|
-| Define a point | `extpoints/<area>/<name>/v0/<name>.go` | Go interface, `pb`-tagged messages, `DefinePoint`, and helpers |
-| Wire the point | `extpoints/<area>/<name>/v0/gen.go` | package doc and `//go:generate` |
-| Publish schema | `go test ./extpoints/<area>/<name>/v0/ -update` | re-render the point's `.proto` from its Go contract |
+| Define a point | `internal/extpoints/<area>/<name>/v0/<name>.go` | Go interface, `pb`-tagged messages, `DefinePoint`, and helpers |
+| Wire the point | `internal/extpoints/<area>/<name>/v0/wire.go` | `Contract`, `ClientPoint`, `ServerPoint`, and the client adapter |
+| Publish schema | `go test ./internal/extpoints/<area>/<name>/v0/ -update` | re-render the point's `.proto` from its Go contract |
 | Invoke the point | the relevant engine flow | call the contract helper with the host as `Resolver` |
 | Support out-of-process | `daemon/extensions.go` → `clientProviders()` | add `<name>pb.ClientPoint` |
 | Write an extension | anywhere | use `extensions.New(Declaration{…})` or implement `Extension` |

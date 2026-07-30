@@ -30,7 +30,7 @@ The phase boundary provides the ordering that matters.
 
 This hook is not a security boundary.
 It sees only the subset of the create request the point models — not the full host config or OCI spec — so a check here can be side-stepped by fields it does not see, such as `--pid=host` or `--device`.
-A policy that must be unbypassable belongs on the create-spec hook (`extpoints/createspec/v0`), which runs on the fully-formed OCI runtime spec — the altitude the NRI bridge and any security-hardening extension work at.
+A policy that must be unbypassable belongs on the create-spec hook (`internal/extpoints/createspec/v0`), which runs on the fully-formed OCI runtime spec — the altitude the NRI bridge and any security-hardening extension work at.
 
 ## 2. Volume driver (named selection)
 

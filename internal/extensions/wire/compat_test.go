@@ -4,9 +4,9 @@ import (
 	"reflect"
 	"testing"
 
-	createspecv0 "github.com/moby/moby/v2/extpoints/createspec/v0"
 	"github.com/moby/moby/v2/internal/extensions/wire"
 	protogen "github.com/moby/moby/v2/internal/extensions/wire/internal/golden"
+	createspecv0 "github.com/moby/moby/v2/internal/extpoints/createspec/v0"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"gotest.tools/v3/assert"

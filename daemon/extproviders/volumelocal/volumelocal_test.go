@@ -9,9 +9,9 @@ import (
 
 	"github.com/moby/moby/v2/daemon/extproviders/volumelocal"
 	"github.com/moby/moby/v2/daemon/internal/idtools"
-	volumedriverv0 "github.com/moby/moby/v2/extpoints/volumedriver/v0"
 	"github.com/moby/moby/v2/internal/extensions"
 	"github.com/moby/moby/v2/internal/extensions/host"
+	volumedriverv0 "github.com/moby/moby/v2/internal/extpoints/volumedriver/v0"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"gotest.tools/v3/assert"

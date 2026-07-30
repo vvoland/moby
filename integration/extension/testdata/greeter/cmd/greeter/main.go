@@ -9,9 +9,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	servicegrpcv0 "github.com/moby/moby/v2/extpoints/servicegrpc/v0"
 	"github.com/moby/moby/v2/integration/extension/testdata/greeter"
 	"github.com/moby/moby/v2/internal/extensions/sdk"
+	servicegrpcv0 "github.com/moby/moby/v2/internal/extpoints/servicegrpc/v0"
 )
 
 func main() {
