@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"github.com/moby/moby/v2/internal/extensions/wire"
 	"path/filepath"
 
 	"github.com/containerd/log"
@@ -10,10 +11,8 @@ import (
 	"github.com/moby/moby/v2/daemon/internal/idtools"
 	"github.com/moby/moby/v2/daemon/internal/rootless"
 	"github.com/moby/moby/v2/internal/extensions"
-	"github.com/moby/moby/v2/internal/extensions/clientpoint"
 	"github.com/moby/moby/v2/internal/extensions/grpcproxy"
 	"github.com/moby/moby/v2/internal/extensions/host"
-	"github.com/moby/moby/v2/internal/extensions/serverpoint"
 	createspecv0 "github.com/moby/moby/v2/internal/extpoints/createspec/v0"
 	servicegrpcv0 "github.com/moby/moby/v2/internal/extpoints/servicegrpc/v0"
 	volumedriverv0 "github.com/moby/moby/v2/internal/extpoints/volumedriver/v0"
@@ -44,7 +43,7 @@ func setupExtensionHost(ctx context.Context, cfg *config.Config, rootIdentity id
 // callable dependency; a point with no provider is skipped. It is empty until
 // the engine core is exposed as callable points, since there is nothing yet for
 // an out-of-process extension to depend on in-daemon.
-func dependencyProviders() []serverpoint.Registration {
+func dependencyProviders() []wire.ServerPoint {
 	return nil
 }
 
@@ -101,8 +100,8 @@ func defaultExtensionDir() (string, error) {
 // supported point. Every point's generated wiring exposes its ClientPoint, and
 // the host uses it to build an in-process caller from a gRPC connection to the
 // extension serving the point.
-func clientProviders() []clientpoint.Registration {
-	return []clientpoint.Registration{
+func clientProviders() []wire.ClientPoint {
+	return []wire.ClientPoint{
 		createspecv0.ClientPoint,
 		volumedriverv0.ClientPoint,
 	}

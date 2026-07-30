@@ -19,9 +19,9 @@ package servicegrpcv0
 
 import (
 	"fmt"
+	"github.com/moby/moby/v2/internal/extensions/wire"
 
 	"github.com/moby/moby/v2/internal/extensions"
-	"github.com/moby/moby/v2/internal/extensions/serverpoint"
 	"google.golang.org/grpc"
 )
 
@@ -37,14 +37,14 @@ type Provider interface {
 var Point = extensions.DefinePoint[Provider]("org.mobyproject.extension.service.grpc.v0")
 
 // ServerPoint serves a service.grpc provider's own gRPC services on a server: it
-// is the point's [serverpoint.Registration], so an out-of-process extension
+// is the point's [wire.ServerPoint], so an out-of-process extension
 // hands it to (*sdk.Server).Register exactly like a wire point hands its
 // generated ServerPoint. It forwards to [Provider.RegisterServices], so the SDK
 // serves the raw services generically and records their names under this point;
 // the daemon publishes only this point's recorded services on the API socket.
-var ServerPoint = serverpoint.Registration{
+var ServerPoint = wire.ServerPoint{
 	Point: Point.ID(),
-	Register: func(r grpc.ServiceRegistrar, impl any) error {
+	Serve: func(r grpc.ServiceRegistrar, impl any) error {
 		provider, ok := impl.(Provider)
 		if !ok {
 			return fmt.Errorf("service.grpc provider has type %T, which does not implement RegisterServices", impl)

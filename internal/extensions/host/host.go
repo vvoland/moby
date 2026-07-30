@@ -9,15 +9,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/moby/moby/v2/internal/extensions/wire"
 	"net"
 	"os"
 	"path/filepath"
 
 	"github.com/moby/moby/v2/internal/extensions"
-	"github.com/moby/moby/v2/internal/extensions/clientpoint"
 	"github.com/moby/moby/v2/internal/extensions/internal/broker"
 	"github.com/moby/moby/v2/internal/extensions/internal/launcher"
-	"github.com/moby/moby/v2/internal/extensions/serverpoint"
 	"google.golang.org/grpc"
 )
 
@@ -38,7 +37,7 @@ type Options struct {
 	// may provide: an extension that declares a point absent from this list is
 	// rejected, because the host has no way to call it -- unless the point is
 	// listed in ExposeOnlyPoints.
-	ClientProviders []clientpoint.Registration
+	ClientProviders []wire.ClientPoint
 	// ExposeOnlyPoints are points a launched extension may declare that have no
 	// in-daemon caller. Listing one exempts it from the ClientProviders rejection
 	// above, without wiring an in-daemon provider for it. The host that owns the
@@ -56,7 +55,7 @@ type Options struct {
 	// provider) on a callback socket that launched extensions reach at init, so an
 	// out-of-process extension can call the points it declares a dependency on. A
 	// point contract's generated wiring exposes one as ServerPoint.
-	DependencyProviders []serverpoint.Registration
+	DependencyProviders []wire.ServerPoint
 }
 
 // Host runs extensions and resolves their point providers. It satisfies
@@ -197,7 +196,7 @@ func New(ctx context.Context, opts Options) (_ *Host, retErr error) {
 // an ambiguous point would otherwise let a dependent pass init and then get
 // Unimplemented at call time. That is failed loudly at startup instead,
 // consistent with the host's all-or-nothing loading.
-func serveCallback(endpoint string, deps []serverpoint.Registration, b *broker.Broker) (*grpc.Server, error) {
+func serveCallback(endpoint string, deps []wire.ServerPoint, b *broker.Broker) (*grpc.Server, error) {
 	srv := grpc.NewServer()
 	for _, dep := range deps {
 		providers := b.Providers(dep.Point)
@@ -205,7 +204,7 @@ func serveCallback(endpoint string, deps []serverpoint.Registration, b *broker.B
 		case 0:
 			continue
 		case 1:
-			dep.Register(srv, providers[0].Impl)
+			dep.Serve(srv, providers[0].Impl)
 		default:
 			return nil, fmt.Errorf("dependency point %q offered on the callback has %d providers; exactly one is required", dep.Point, len(providers))
 		}
@@ -272,13 +271,13 @@ func closeLaunchedErr(ctx context.Context, launched []*launcher.Launched) error 
 }
 
 // clientProviderMap indexes the registrations by point id, rejecting duplicates.
-func clientProviderMap(regs []clientpoint.Registration) (map[extensions.PointID]clientpoint.Provider, error) {
-	m := make(map[extensions.PointID]clientpoint.Provider, len(regs))
+func clientProviderMap(regs []wire.ClientPoint) (map[extensions.PointID]wire.ClientPoint, error) {
+	m := make(map[extensions.PointID]wire.ClientPoint, len(regs))
 	for _, r := range regs {
 		if _, ok := m[r.Point]; ok {
 			return nil, fmt.Errorf("duplicate client provider for point %q", r.Point)
 		}
-		m[r.Point] = r.Provider
+		m[r.Point] = r
 	}
 	return m, nil
 }
@@ -288,7 +287,7 @@ func clientProviderMap(regs []clientpoint.Registration) (map[extensions.PointID]
 // from the host's supported providers. A launched extension is pure data, so it
 // is a [extensions.Declaration] wrapped with [extensions.New]. It has no
 // Shutdown: the host stops the process (see [Host.launched]), not the broker.
-func extensionFromLaunched(launched *launcher.Launched, providers map[extensions.PointID]clientpoint.Provider, exposeOnly map[extensions.PointID]bool) (extensions.Extension, error) {
+func extensionFromLaunched(launched *launcher.Launched, providers map[extensions.PointID]wire.ClientPoint, exposeOnly map[extensions.PointID]bool) (extensions.Extension, error) {
 	decl := extensions.Declaration{
 		ID:           launched.ID,
 		Dependencies: launched.Dependencies,
@@ -311,14 +310,14 @@ func extensionFromLaunched(launched *launcher.Launched, providers map[extensions
 			// and may be published by the host that owns that policy.
 			continue
 		}
-		build, ok := providers[p.ID]
+		cp, ok := providers[p.ID]
 		if !ok {
 			// The daemon has no in-process caller for this point, so it cannot
 			// support an extension providing it. A declared point absent from
 			// ClientProviders (and not expose-only) is rejected.
 			return nil, fmt.Errorf("extension %q declares unsupported point %q", launched.ID, p.ID)
 		}
-		provider := build(launched.Conn)
+		provider := cp.Build(launched.Conn)
 		decl.Providers = append(decl.Providers, provider)
 	}
 	return extensions.New(decl), nil

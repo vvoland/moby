@@ -4,8 +4,6 @@ import (
 	"context"
 
 	"github.com/moby/moby/v2/internal/extensions"
-	"github.com/moby/moby/v2/internal/extensions/clientpoint"
-	"github.com/moby/moby/v2/internal/extensions/serverpoint"
 	"github.com/moby/moby/v2/internal/extensions/wire"
 	"google.golang.org/grpc"
 )
@@ -14,18 +12,18 @@ import (
 var Contract = wire.MustContract(Point, "Greeter")
 
 // ServerPoint serves the point for an out-of-process extension.
-var ServerPoint = serverpoint.Registration{
+var ServerPoint = wire.ServerPoint{
 	Point: Point.ID(),
-	Register: func(r grpc.ServiceRegistrar, impl any) error {
+	Serve: func(r grpc.ServiceRegistrar, impl any) error {
 		return wire.Serve(r, Contract, impl)
 	},
 }
 
 // ClientPoint builds an in-daemon [Greeter] backed by an out-of-process
 // provider.
-var ClientPoint = clientpoint.Registration{
+var ClientPoint = wire.ClientPoint{
 	Point: Point.ID(),
-	Provider: func(conn grpc.ClientConnInterface) extensions.Provider {
+	Build: func(conn grpc.ClientConnInterface) extensions.Provider {
 		return Point.Provide(client{conn})
 	},
 }

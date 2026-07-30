@@ -12,7 +12,6 @@ import (
 
 	"github.com/moby/moby/v2/integration/extension/testdata/greeter"
 	"github.com/moby/moby/v2/internal/extensions"
-	"github.com/moby/moby/v2/internal/extensions/clientpoint"
 	"github.com/moby/moby/v2/internal/extensions/grpcproxy"
 	"github.com/moby/moby/v2/internal/extensions/host"
 	echov1 "github.com/moby/moby/v2/internal/extensions/internal/launcher/echo/v1"
@@ -121,7 +120,7 @@ func TestHookOnlyServicesAreNotSocketExposed(t *testing.T) {
 	h, err := host.New(ctx, host.Options{
 		RuntimeDir:      t.TempDir(),
 		Dirs:            []string{dir},
-		ClientProviders: []clientpoint.Registration{echov1.ClientPoint},
+		ClientProviders: []wire.ClientPoint{echov1.ClientPoint},
 	})
 	assert.NilError(t, err)
 	defer func() { assert.NilError(t, h.Shutdown(context.Background())) }()

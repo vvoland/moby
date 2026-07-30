@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/moby/moby/v2/internal/extensions/wire"
 	"io"
 	"net"
 	"path/filepath"
@@ -12,7 +13,6 @@ import (
 
 	"github.com/moby/moby/v2/internal/extensions"
 	"github.com/moby/moby/v2/internal/extensions/sdk/sdkpb"
-	"github.com/moby/moby/v2/internal/extensions/serverpoint"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"gotest.tools/v3/assert"
@@ -22,9 +22,9 @@ import (
 func TestRegisterBuildsDeclaration(t *testing.T) {
 	srv := NewServer()
 	registered := false
-	point := serverpoint.Registration{
-		Point:    "org.example.point.v1",
-		Register: func(grpc.ServiceRegistrar, any) error { registered = true; return nil },
+	point := wire.ServerPoint{
+		Point: "org.example.point.v1",
+		Serve: func(grpc.ServiceRegistrar, any) error { registered = true; return nil },
 	}
 	ext := extensions.New(extensions.Declaration{
 		ID:           "org.example.extension.v1",
@@ -52,9 +52,9 @@ func TestRegisterBuildsDeclaration(t *testing.T) {
 // the API socket. A provider that registers no service records an empty list.
 func TestRegisterRecordsServedServices(t *testing.T) {
 	desc := &grpc.ServiceDesc{ServiceName: "org.example.point.v1.Thing", HandlerType: (*any)(nil)}
-	served := serverpoint.Registration{
-		Point:    "org.example.point.v1",
-		Register: func(r grpc.ServiceRegistrar, impl any) error { r.RegisterService(desc, impl); return nil },
+	served := wire.ServerPoint{
+		Point: "org.example.point.v1",
+		Serve: func(r grpc.ServiceRegistrar, impl any) error { r.RegisterService(desc, impl); return nil },
 	}
 	srv := NewServer()
 	assert.NilError(t, srv.Register(extensions.New(extensions.Declaration{
@@ -66,9 +66,9 @@ func TestRegisterRecordsServedServices(t *testing.T) {
 	assert.Equal(t, srv.declaration.GetProviderServices()[0].GetPoint(), "org.example.point.v1")
 	assert.DeepEqual(t, srv.declaration.GetProviderServices()[0].GetServices(), []string{"org.example.point.v1.Thing"})
 
-	noService := serverpoint.Registration{
-		Point:    "org.example.point.v1",
-		Register: func(grpc.ServiceRegistrar, any) error { return nil },
+	noService := wire.ServerPoint{
+		Point: "org.example.point.v1",
+		Serve: func(grpc.ServiceRegistrar, any) error { return nil },
 	}
 	plainSrv := NewServer()
 	assert.NilError(t, plainSrv.Register(extensions.New(extensions.Declaration{

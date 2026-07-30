@@ -98,7 +98,7 @@ func TestLocalDriverIsLocationTransparent(t *testing.T) {
 		lis, err := net.Listen("unix", sock)
 		assert.NilError(t, err)
 		srv := grpc.NewServer()
-		assert.NilError(t, volumedriverv0.ServerPoint.Register(srv, d))
+		assert.NilError(t, volumedriverv0.ServerPoint.Serve(srv, d))
 		go srv.Serve(lis)
 		t.Cleanup(srv.Stop)
 
@@ -111,7 +111,7 @@ func TestLocalDriverIsLocationTransparent(t *testing.T) {
 		assert.NilError(t, err)
 		t.Cleanup(func() { _ = conn.Close() })
 
-		remote := volumedriverv0.ClientPoint.Provider(conn).Impl.(volumedriverv0.Driver)
+		remote := volumedriverv0.ClientPoint.Build(conn).Impl.(volumedriverv0.Driver)
 		scope, mountpoint, listed := exercise(t, ctx, remote, "remote")
 		assert.Check(t, is.Equal(scope, "local"))
 		assert.Check(t, mountpoint != "")

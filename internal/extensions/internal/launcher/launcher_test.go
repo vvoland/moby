@@ -124,7 +124,7 @@ func TestLaunchOutOfProcess(t *testing.T) {
 	assert.Check(t, is.Len(launched.Points, 1))
 	assert.Equal(t, launched.Points[0].ID, echov1.Point.ID())
 
-	client := echov1.ClientPoint.Provider(launched.Conn).Impl.(echov1.EchoServer)
+	client := echov1.ClientPoint.Build(launched.Conn).Impl.(echov1.EchoServer)
 
 	resp, err := client.Echo(ctx, &echov1.EchoRequest{Message: "ping"})
 	assert.NilError(t, err, "non-empty message should be echoed")

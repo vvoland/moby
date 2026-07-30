@@ -1,14 +1,13 @@
 package host
 
 import (
+	"github.com/moby/moby/v2/internal/extensions/wire"
 	"path/filepath"
 	"testing"
 
 	"github.com/moby/moby/v2/internal/extensions"
-	"github.com/moby/moby/v2/internal/extensions/clientpoint"
 	"github.com/moby/moby/v2/internal/extensions/internal/broker"
 	"github.com/moby/moby/v2/internal/extensions/internal/launcher"
-	"github.com/moby/moby/v2/internal/extensions/serverpoint"
 	"google.golang.org/grpc"
 	"gotest.tools/v3/assert"
 )
@@ -22,9 +21,12 @@ func TestExtensionFromLaunchedRejectsUnsupportedPoints(t *testing.T) {
 	const supported = extensions.PointID("org.mobyproject.extension.supported.v1")
 	const unsupported = extensions.PointID("org.example.own.api.v1")
 
-	providers := map[extensions.PointID]clientpoint.Provider{
-		supported: func(grpc.ClientConnInterface) extensions.Provider {
-			return extensions.Provider{Point: supported, Impl: "impl"}
+	providers := map[extensions.PointID]wire.ClientPoint{
+		supported: {
+			Point: supported,
+			Build: func(grpc.ClientConnInterface) extensions.Provider {
+				return extensions.Provider{Point: supported, Impl: "impl"}
+			},
 		},
 	}
 
@@ -66,9 +68,9 @@ func TestClientProviderMap(t *testing.T) {
 	}
 
 	// Distinct point ids are indexed, one entry each.
-	m, err := clientProviderMap([]clientpoint.Registration{
-		{Point: pointA, Provider: build},
-		{Point: pointB, Provider: build},
+	m, err := clientProviderMap([]wire.ClientPoint{
+		{Point: pointA, Build: build},
+		{Point: pointB, Build: build},
 	})
 	assert.NilError(t, err)
 	assert.Equal(t, len(m), 2)
@@ -78,9 +80,9 @@ func TestClientProviderMap(t *testing.T) {
 	assert.Assert(t, okB)
 
 	// Two registrations for the same point are rejected.
-	_, err = clientProviderMap([]clientpoint.Registration{
-		{Point: pointA, Provider: build},
-		{Point: pointA, Provider: build},
+	_, err = clientProviderMap([]wire.ClientPoint{
+		{Point: pointA, Build: build},
+		{Point: pointA, Build: build},
 	})
 	assert.ErrorContains(t, err, "duplicate client provider")
 	assert.ErrorContains(t, err, string(pointA))
@@ -107,10 +109,10 @@ func TestServeCallback(t *testing.T) {
 
 	// A stub server registration for the dependency point that records the
 	// implementations it was asked to serve; it needs only to be invokable.
-	newDep := func(served *[]any) serverpoint.Registration {
-		return serverpoint.Registration{
+	newDep := func(served *[]any) wire.ServerPoint {
+		return wire.ServerPoint{
 			Point: dep,
-			Register: func(_ grpc.ServiceRegistrar, impl any) error {
+			Serve: func(_ grpc.ServiceRegistrar, impl any) error {
 				*served = append(*served, impl)
 				return nil
 			},
@@ -121,7 +123,7 @@ func TestServeCallback(t *testing.T) {
 		b := broker.New()
 		var served []any
 		endpoint := filepath.Join(t.TempDir(), "callback.sock")
-		srv, err := serveCallback(endpoint, []serverpoint.Registration{newDep(&served)}, b)
+		srv, err := serveCallback(endpoint, []wire.ServerPoint{newDep(&served)}, b)
 		assert.NilError(t, err)
 		if srv != nil {
 			defer srv.Stop()
@@ -134,7 +136,7 @@ func TestServeCallback(t *testing.T) {
 		assert.NilError(t, b.Register(newProviderExtension("org.example.a.v1", dep)))
 		var served []any
 		endpoint := filepath.Join(t.TempDir(), "callback.sock")
-		srv, err := serveCallback(endpoint, []serverpoint.Registration{newDep(&served)}, b)
+		srv, err := serveCallback(endpoint, []wire.ServerPoint{newDep(&served)}, b)
 		assert.NilError(t, err)
 		assert.Assert(t, srv != nil)
 		defer srv.Stop()
@@ -147,7 +149,7 @@ func TestServeCallback(t *testing.T) {
 		assert.NilError(t, b.Register(newProviderExtension("org.example.b.v1", dep)))
 		var served []any
 		endpoint := filepath.Join(t.TempDir(), "callback.sock")
-		srv, err := serveCallback(endpoint, []serverpoint.Registration{newDep(&served)}, b)
+		srv, err := serveCallback(endpoint, []wire.ServerPoint{newDep(&served)}, b)
 		if srv != nil {
 			srv.Stop()
 		}
@@ -176,9 +178,9 @@ func TestServeCallbackCreatesRuntimeDir(t *testing.T) {
 	// A path under a directory that does not exist, as RuntimeDir is before
 	// anything is launched.
 	endpoint := filepath.Join(t.TempDir(), "never-created", "callback.sock")
-	srv, err := serveCallback(endpoint, []serverpoint.Registration{{
-		Point:    dep,
-		Register: func(grpc.ServiceRegistrar, any) error { return nil },
+	srv, err := serveCallback(endpoint, []wire.ServerPoint{{
+		Point: dep,
+		Serve: func(grpc.ServiceRegistrar, any) error { return nil },
 	}}, b)
 	assert.NilError(t, err)
 	assert.Assert(t, srv != nil)

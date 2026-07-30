@@ -15,7 +15,10 @@ type ExtensionID string
 // PointID identifies an extension point contract.
 type PointID string
 
-// Dependency declares one extension dependency.
+// Dependency declares one dependency as data rather than as a handle. A
+// launched extension arrives this way, because its declaration crossed a process
+// boundary as strings; in-process extensions use [Dep] instead, via
+// [Point.Require], [Point.Optional], or [Point.Lazy].
 type Dependency struct {
 	Point     PointID
 	Extension ExtensionID
@@ -116,18 +119,6 @@ func (p Point[T]) ID() PointID {
 // Provide returns a provider declaration for impl.
 func (p Point[T]) Provide(impl T) Provider {
 	return Provider{Point: p.id, Impl: impl}
-}
-
-// Dependency returns a required dependency declaration for the point: at least
-// one provider must exist before the dependent initializes.
-func (p Point[T]) Dependency() Dependency {
-	return Dependency{Point: p.id}
-}
-
-// OptionalDependency returns an optional dependency declaration for the point:
-// the dependent still initializes, ordered after any providers, when none exist.
-func (p Point[T]) OptionalDependency() Dependency {
-	return Dependency{Point: p.id, Optional: true}
 }
 
 // lazyRegexp returns a regexp accessor that compiles pattern on first use.

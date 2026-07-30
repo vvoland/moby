@@ -5,15 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/moby/moby/v2/internal/extensions/wire"
 	"io"
 	"net"
 	"os"
 
 	"github.com/containerd/log"
 	"github.com/moby/moby/v2/internal/extensions"
-	"github.com/moby/moby/v2/internal/extensions/clientpoint"
 	"github.com/moby/moby/v2/internal/extensions/sdk/sdkpb"
-	"github.com/moby/moby/v2/internal/extensions/serverpoint"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -38,7 +37,7 @@ type Server struct {
 
 	// depends maps each dependency point to the client adapter that reaches its
 	// provider over the callback connection.
-	depends map[extensions.PointID]clientpoint.Provider
+	depends map[extensions.PointID]wire.ClientPoint
 	// deps are the extension's declared dependency handles, bound to the
 	// callback channel just before Init.
 	deps []extensions.AnyDep
@@ -60,7 +59,7 @@ func NewServer() *Server {
 
 // Register adds ext to the server: it declares the extension's id, providers,
 // dependencies, and conflicts, and serves each provider's gRPC service on the
-// server using the matching serverpoint. points must cover every point ext
+// server using the matching ServerPoint. points must cover every point ext
 // provides. One server serves one extension.
 //
 // Serving is uniform: every provider's service is registered the same way, so
@@ -69,7 +68,7 @@ func NewServer() *Server {
 // extension's service.grpc declaration, not a serving mode here. The SDK records
 // service names per provider point and reports that inventory to the daemon; it
 // does not decide which point is public.
-func (s *Server) Register(ext extensions.Extension, points ...serverpoint.Registration) error {
+func (s *Server) Register(ext extensions.Extension, points ...wire.ServerPoint) error {
 	if s.registered {
 		return errors.New("server already has an extension")
 	}
@@ -77,9 +76,9 @@ func (s *Server) Register(ext extensions.Extension, points ...serverpoint.Regist
 	if decl.ID == "" {
 		return errors.New("extension id is required")
 	}
-	byPoint := make(map[extensions.PointID]serverpoint.Register, len(points))
+	byPoint := make(map[extensions.PointID]func(grpc.ServiceRegistrar, any) error, len(points))
 	for _, p := range points {
-		byPoint[p.Point] = p.Register
+		byPoint[p.Point] = p.Serve
 	}
 	s.declaration.Id = string(decl.ID)
 	for _, provider := range decl.Providers {
@@ -138,16 +137,15 @@ func (r *recordingRegistrar) RegisterService(desc *grpc.ServiceDesc, impl any) {
 	r.target.RegisterService(desc, impl)
 }
 
-// Depends registers the client wiring for the points this extension declares a
-// dependency on, so the resolver its Init receives can build a caller for each
-// over the callback channel. A point contract's generated wiring exposes one as
-// ClientPoint; pass one per dependency point the extension will call.
-func (s *Server) Depends(regs ...clientpoint.Registration) {
+// Depends registers the client side of each point this extension declares a
+// dependency on, so its handles can build a caller over the callback channel.
+// Pass one per dependency point the extension will call.
+func (s *Server) Depends(regs ...wire.ClientPoint) {
 	if s.depends == nil {
-		s.depends = make(map[extensions.PointID]clientpoint.Provider, len(regs))
+		s.depends = make(map[extensions.PointID]wire.ClientPoint, len(regs))
 	}
 	for _, r := range regs {
-		s.depends[r.Point] = r.Provider
+		s.depends[r.Point] = r
 	}
 }
 
@@ -250,15 +248,15 @@ func (s *Server) resolver() (extensions.Resolver, error) {
 // callback connection to the daemon, which routes each to the real provider.
 type callbackResolver struct {
 	conn    grpc.ClientConnInterface
-	clients map[extensions.PointID]clientpoint.Provider
+	clients map[extensions.PointID]wire.ClientPoint
 }
 
 func (r *callbackResolver) SingleProvider(point extensions.PointID) (any, error) {
-	build, ok := r.clients[point]
+	cp, ok := r.clients[point]
 	if !ok || r.conn == nil {
 		return nil, fmt.Errorf("extension has no resolvable dependency for point %q (declare it with Depends)", point)
 	}
-	return build(r.conn).Impl, nil
+	return cp.Build(r.conn).Impl, nil
 }
 
 func (r *callbackResolver) Provider(point extensions.PointID, _ extensions.ExtensionID) (any, error) {

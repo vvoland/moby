@@ -233,7 +233,6 @@ func TestTypedPointLookup(t *testing.T) {
 	assert.NilError(t, err)
 	assert.Equal(t, provider, second)
 
-	assert.Equal(t, point.Dependency(), extensions.Dependency{Point: point.ID()})
 }
 
 func TestTypedPointLookupRejectsWrongImplementationType(t *testing.T) {

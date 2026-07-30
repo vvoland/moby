@@ -2,6 +2,7 @@ package host_test
 
 import (
 	"context"
+	"github.com/moby/moby/v2/internal/extensions/wire"
 	"os/exec"
 	"path/filepath"
 	"sync/atomic"
@@ -12,7 +13,6 @@ import (
 	"github.com/moby/moby/v2/internal/extensions"
 	greeterv0 "github.com/moby/moby/v2/internal/extensions/example/greeter/v0"
 	"github.com/moby/moby/v2/internal/extensions/host"
-	"github.com/moby/moby/v2/internal/extensions/serverpoint"
 	"gotest.tools/v3/assert"
 )
 
@@ -57,7 +57,7 @@ func TestOutOfProcessDependency(t *testing.T) {
 		Extensions: []extensions.Extension{greeter}, // in-process provider of the greeter point
 		Dirs:       []string{dir},                   // out-of-process dependent
 		// Offer the greeter point to launched extensions as a dependency.
-		DependencyProviders: []serverpoint.Registration{greeterv0.ServerPoint},
+		DependencyProviders: []wire.ServerPoint{greeterv0.ServerPoint},
 	})
 	assert.NilError(t, err) // greeterdep's Init called the dependency and validated the reply
 	defer func() { assert.NilError(t, h.Shutdown(context.Background())) }()
