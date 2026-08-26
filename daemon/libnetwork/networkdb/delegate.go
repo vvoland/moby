@@ -328,27 +328,28 @@ func (nDB *NetworkDB) handleNodeMessage(buf []byte) {
 	}
 }
 
-func (nDB *NetworkDB) handleNetworkMessage(buf []byte) {
+func (nDB *NetworkDB) handleNetworkMessage(buf []byte, isBulkSync bool) {
 	var nEvent NetworkEvent
 	if err := proto.Unmarshal(buf, &nEvent); err != nil {
 		log.G(context.TODO()).Errorf("Error decoding network event message: %v", err)
 		return
 	}
 
-	if rebroadcast := nDB.handleNetworkEvent(&nEvent); rebroadcast {
-		var err error
-		buf, err = encodeRawMessage(MessageTypeNetworkEvent, buf)
-		if err != nil {
-			log.G(context.TODO()).Errorf("Error marshalling gossip message for network event rebroadcast: %v", err)
-			return
-		}
-
-		nDB.networkBroadcasts.QueueBroadcast(&networkEventMessage{
-			msg:  buf,
-			id:   nEvent.NetworkID,
-			node: nEvent.NodeName,
-		})
+	if rebroadcast := nDB.handleNetworkEvent(&nEvent); !rebroadcast || isBulkSync {
+		return
 	}
+
+	buf, err := encodeRawMessage(MessageTypeNetworkEvent, buf)
+	if err != nil {
+		log.G(context.TODO()).Errorf("Error marshalling gossip message for network event rebroadcast: %v", err)
+		return
+	}
+
+	nDB.networkBroadcasts.QueueBroadcast(&networkEventMessage{
+		msg:  buf,
+		id:   nEvent.NetworkID,
+		node: nEvent.NodeName,
+	})
 }
 
 func (nDB *NetworkDB) handleBulkSync(buf []byte) {
@@ -407,7 +408,7 @@ func (nDB *NetworkDB) handleMessage(buf []byte, isBulkSync bool) {
 	case MessageTypeNodeEvent:
 		nDB.handleNodeMessage(data)
 	case MessageTypeNetworkEvent:
-		nDB.handleNetworkMessage(data)
+		nDB.handleNetworkMessage(data, isBulkSync)
 	case MessageTypeTableEvent:
 		nDB.handleTableMessage(data, isBulkSync)
 	case MessageTypeBulkSync:

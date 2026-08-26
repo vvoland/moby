@@ -280,6 +280,51 @@ func TestLeaveRejoinOutOfOrder(t *testing.T) {
 	assert.Check(t, is.DeepEqual(got, want))
 }
 
+func TestBulkSyncNetworkEventAppliedWithoutRebroadcast(t *testing.T) {
+	nDB := newNetworkDB(DefaultConfig())
+	nDB.networkBroadcasts = &memberlist.TransmitLimitedQueue{}
+	nDB.nodeBroadcasts = &memberlist.TransmitLimitedQueue{}
+	assert.Assert(t, nDB.JoinNetwork("network1"))
+
+	// Do not count the local network join in the rebroadcast assertion.
+	nDB.networkBroadcasts = &memberlist.TransmitLimitedQueue{}
+	(&eventDelegate{nDB}).NotifyJoin(&memberlist.Node{
+		Name: "node1",
+		Addr: net.IPv4(1, 2, 3, 4),
+	})
+
+	msgs := messageBuffer{t: t}
+	msgs.Append(MessageTypeNetworkEvent, &NetworkEvent{
+		Type:      NetworkEventTypeJoin,
+		LTime:     1,
+		NodeName:  "node1",
+		NetworkID: "network1",
+	})
+	msgs.Append(MessageTypeTableEvent, &TableEvent{
+		Type:      TableEventTypeCreate,
+		LTime:     1,
+		NodeName:  "node1",
+		NetworkID: "network1",
+		TableName: "table1",
+		Key:       "key1",
+		Value:     []byte("value1"),
+	})
+
+	bulkSync, err := encodeMessage(MessageTypeBulkSync, &BulkSyncMessage{
+		LTime:    1,
+		NodeName: "node1",
+		Networks: []string{"network1"},
+		Payload:  msgs.Compound(),
+	})
+	assert.NilError(t, err)
+	(&delegate{nDB}).NotifyMsg(bulkSync)
+
+	value, err := nDB.GetEntry("table1", "network1", "key1")
+	assert.NilError(t, err)
+	assert.Check(t, is.DeepEqual(value, []byte("value1")))
+	assert.Equal(t, nDB.networkBroadcasts.NumQueued(), 0)
+}
+
 func drainChannel(ch <-chan events.Event) []events.Event {
 	var events []events.Event
 	for {
