@@ -180,6 +180,16 @@ func TestEndpointIPAMConfigWithInvalidConfig(t *testing.T) {
 			},
 			expectedErrors: []string{"invalid link-local IP address:"},
 		},
+		{
+			name: "non-link-local addresses as link-local",
+			ipamConfig: &networktypes.EndpointIPAMConfig{
+				LinkLocalIPs: []netip.Addr{netip.MustParseAddr("10.0.0.5"), netip.MustParseAddr("2001:db8::1")},
+			},
+			expectedErrors: []string{
+				"invalid link-local IP address: 10.0.0.5",
+				"invalid link-local IP address: 2001:db8::1",
+			},
+		},
 	}
 
 	for _, tc := range tests {
