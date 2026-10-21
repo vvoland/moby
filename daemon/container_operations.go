@@ -433,6 +433,9 @@ func (daemon *Daemon) allocateNetwork(ctx context.Context, cfg *config.Config, c
 	for netName, epConf := range networks {
 		cleanOperationalData(epConf)
 		if err := daemon.connectToNetwork(ctx, cfg, ctr, netName, epConf); err != nil {
+			// connectToNetwork drops the entry on error; restore it so the
+			// next start joins this network again.
+			ctr.NetworkSettings.Networks[netName] = epConf
 			return err
 		}
 	}
